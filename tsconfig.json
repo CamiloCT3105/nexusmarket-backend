@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    // Environment Settings
+    "module": "commonjs",
+    "target": "es2020",
+    "types": ["node"],
+
+    // Other Outputs
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    // Stricter Typechecking Options
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Recommended Options
+    "strict": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+
+    // File Layout
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "esModuleInterop": true
+  }
+}
