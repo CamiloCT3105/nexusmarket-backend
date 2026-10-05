@@ -3,6 +3,7 @@ import userRoutes from "./routes/userRoutes";
 import buyerRoutes from "./routes/buyerRoutes";
 import sellerRoutes from "./routes/sellerRoutes";
 import productRoutes from "./routes/productRoutes";
+import warehouseRoutes from "./routes/warehouseRoutes";
 
 const app = express();
 
@@ -16,5 +17,6 @@ app.use("/api/users", userRoutes);
 app.use("/api/buyers", buyerRoutes);
 app.use("/api/sellers", sellerRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/warehouses", warehouseRoutes);
 
 export default app;
