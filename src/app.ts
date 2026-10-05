@@ -4,6 +4,7 @@ import buyerRoutes from "./routes/buyerRoutes";
 import sellerRoutes from "./routes/sellerRoutes";
 import productRoutes from "./routes/productRoutes";
 import warehouseRoutes from "./routes/warehouseRoutes";
+import inventoryRoutes from "./routes/inventoryRoutes";
 
 const app = express();
 
@@ -18,5 +19,6 @@ app.use("/api/buyers", buyerRoutes);
 app.use("/api/sellers", sellerRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/warehouses", warehouseRoutes);
+app.use("/api/inventory", inventoryRoutes);
 
 export default app;
