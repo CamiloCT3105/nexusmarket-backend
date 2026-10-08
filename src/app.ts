@@ -11,6 +11,7 @@ import invoiceRoutes from "./routes/invoiceRoutes";
 import shipmentRoutes from "./routes/shipmentRoutes";
 import returnRoutes from "./routes/returnRoutes";
 import refundRoutes from "./routes/refundRoutes";
+import authRoutes from "./routes/authRoutes";
 
 const app = express();
 
@@ -32,5 +33,6 @@ app.use("/api/invoices", invoiceRoutes);
 app.use("/api/shipments", shipmentRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/refunds", refundRoutes);
+app.use("/api/auth", authRoutes);
 
 export default app;
