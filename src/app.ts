@@ -8,6 +8,7 @@ import inventoryRoutes from "./routes/inventoryRoutes";
 import cartRoutes from "./routes/cartRoutes";
 import orderRoutes from "./routes/orderRoutes";
 import invoiceRoutes from "./routes/invoiceRoutes";
+import shipmentRoutes from "./routes/shipmentRoutes";
 
 const app = express();
 
@@ -26,5 +27,6 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/carts", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/invoices", invoiceRoutes);
+app.use("/api/shipments", shipmentRoutes);
 
 export default app;
