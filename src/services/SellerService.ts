@@ -8,15 +8,7 @@ type OnboardSellerInput = {
 };
 
 export const SellerService = {
-  // Según el documento, solo el Administrador puede incorporar vendedores.
-  // Por ahora no tenemos autenticación real, así que recibimos el rol
-  // de quien ejecuta la acción como parámetro explícito. Cuando
-  // implementemos login/auth, esto se reemplazará por el usuario autenticado.
-  onboardSeller(input: OnboardSellerInput, actingUserRole: UserRole): Seller {
-    if (actingUserRole !== UserRole.ADMIN) {
-      throw new Error("Solo un Administrador puede incorporar vendedores.");
-    }
-
+  onboardSeller(input: OnboardSellerInput): Seller {
     const user = UserService.getUserById(input.userId);
 
     if (user.role !== UserRole.SELLER) {
