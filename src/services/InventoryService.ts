@@ -127,6 +127,21 @@ export const InventoryService = {
     return item;
   },
 
+    // Busca, entre las bodegas indicadas, la primera que tenga stock disponible suficiente
+  findWarehouseWithStock(
+    productId: string,
+    warehouseIds: string[],
+    quantity: number
+  ): string | undefined {
+    for (const warehouseId of warehouseIds) {
+      const item = InventoryRepository.findItem(productId, warehouseId);
+      if (item && this.getAvailableQuantity(item) >= quantity) {
+        return warehouseId;
+      }
+    }
+    return undefined;
+  },
+
   // Método privado de apoyo: registra cada movimiento en la bitácora
   recordMovement(
     productId: string,

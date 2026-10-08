@@ -66,4 +66,8 @@ export const CartService = {
 
     return CartRepository.update(buyerId, { items: updatedItems })!;
   },
+
+  clearCart(buyerId: string): void {
+    CartRepository.clear(buyerId);
+  },
 };
