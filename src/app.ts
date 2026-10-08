@@ -5,6 +5,7 @@ import sellerRoutes from "./routes/sellerRoutes";
 import productRoutes from "./routes/productRoutes";
 import warehouseRoutes from "./routes/warehouseRoutes";
 import inventoryRoutes from "./routes/inventoryRoutes";
+import cartRoutes from "./routes/cartRoutes";
 
 const app = express();
 
@@ -20,5 +21,6 @@ app.use("/api/sellers", sellerRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api/carts", cartRoutes);
 
 export default app;
