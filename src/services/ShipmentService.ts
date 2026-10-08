@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { Shipment, ShipmentEvent, ShipmentStatus } from "../models/Shipment";
 import { OrderStatus } from "../models/Order";
-import { UserRole } from "../models/User";
 import { ShipmentRepository } from "../repositories/ShipmentRepository";
 import { OrderService } from "./OrderService";
 
@@ -12,18 +11,8 @@ const allowedTransitions: Record<ShipmentStatus, ShipmentStatus[]> = {
   [ShipmentStatus.DELIVERED]: [],
 };
 
-// Temporal: igual que en SellerService, el rol de quien actúa llega como parámetro
-// hasta que implementemos autenticación real.
-function assertLogisticsRole(actingUserRole: UserRole): void {
-  if (actingUserRole !== UserRole.LOGISTICS_OPERATOR && actingUserRole !== UserRole.ADMIN) {
-    throw new Error("Solo un Operador Logístico o un Administrador puede gestionar envíos.");
-  }
-}
-
 export const ShipmentService = {
-  createShipment(orderId: string, actingUserRole: UserRole): Shipment {
-    assertLogisticsRole(actingUserRole);
-
+  createShipment(orderId: string): Shipment {
     const order = OrderService.getOrderById(orderId);
     if (order.status !== OrderStatus.PAID) {
       throw new Error("Solo se puede crear un envío para un pedido en estado PAID.");
@@ -67,14 +56,7 @@ export const ShipmentService = {
     return shipment;
   },
 
-  updateStatus(
-    shipmentId: string,
-    newStatus: ShipmentStatus,
-    actingUserRole: UserRole,
-    note?: string
-  ): Shipment {
-    assertLogisticsRole(actingUserRole);
-
+  updateStatus(shipmentId: string, newStatus: ShipmentStatus, note?: string): Shipment {
     const shipment = this.getShipmentById(shipmentId);
 
     if (!allowedTransitions[shipment.status].includes(newStatus)) {
@@ -104,7 +86,7 @@ export const ShipmentService = {
     })!;
   },
 
-  confirmDelivery(shipmentId: string, actingUserRole: UserRole, note?: string): Shipment {
-    return this.updateStatus(shipmentId, ShipmentStatus.DELIVERED, actingUserRole, note);
+  confirmDelivery(shipmentId: string, note?: string): Shipment {
+    return this.updateStatus(shipmentId, ShipmentStatus.DELIVERED, note);
   },
 };
