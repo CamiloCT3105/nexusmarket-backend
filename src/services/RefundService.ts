@@ -1,6 +1,5 @@
 import { randomUUID } from "crypto";
 import { Refund, RefundStatus } from "../models/Refund";
-import { UserRole } from "../models/User";
 import { RefundRepository } from "../repositories/RefundRepository";
 
 const allowedTransitions: Record<RefundStatus, RefundStatus[]> = {
@@ -48,11 +47,7 @@ export const RefundService = {
     return refund;
   },
 
-  updateStatus(refundId: string, newStatus: RefundStatus, actingUserRole: UserRole): Refund {
-    if (actingUserRole !== UserRole.ADMIN) {
-      throw new Error("Solo un Administrador puede actualizar el estado de un reembolso.");
-    }
-
+  updateStatus(refundId: string, newStatus: RefundStatus): Refund {
     const refund = this.getRefundById(refundId);
 
     if (!allowedTransitions[refund.status].includes(newStatus)) {

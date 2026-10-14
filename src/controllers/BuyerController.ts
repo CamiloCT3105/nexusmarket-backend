@@ -1,15 +1,14 @@
 import { Request, Response } from "express";
 import { BuyerService } from "../services/BuyerService";
 import { CommercialStatus, Address } from "../models/Buyer";
+import { getAuthUser } from "../middlewares/authenticate";
 
 export const BuyerController = {
   register(req: Request, res: Response): void {
     try {
-      const { userId, primaryAddress } = req.body as {
-        userId: string;
-        primaryAddress: Address;
-      };
-      const buyer = BuyerService.registerBuyer({ userId, primaryAddress });
+      const authUser = getAuthUser(res);
+      const { primaryAddress } = req.body as { primaryAddress: Address };
+      const buyer = BuyerService.registerBuyer({ userId: authUser.id, primaryAddress });
       res.status(201).json(buyer);
     } catch (error) {
       res.status(400).json({ message: (error as Error).message });

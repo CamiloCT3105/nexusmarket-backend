@@ -1,15 +1,11 @@
 import { Request, Response } from "express";
 import { SellerService } from "../services/SellerService";
-import { UserRole } from "../models/User";
 
 export const SellerController = {
   onboard(req: Request, res: Response): void {
     try {
-      const { userId, actingUserRole } = req.body as {
-        userId: string;
-        actingUserRole: UserRole;
-      };
-      const seller = SellerService.onboardSeller({ userId }, actingUserRole);
+      const { userId } = req.body as { userId: string };
+      const seller = SellerService.onboardSeller({ userId });
       res.status(201).json(seller);
     } catch (error) {
       res.status(400).json({ message: (error as Error).message });

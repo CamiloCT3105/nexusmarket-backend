@@ -1,4 +1,6 @@
 import express from "express";
+import { authenticate } from "./middlewares/authenticate";
+import authRoutes from "./routes/authRoutes";
 import userRoutes from "./routes/userRoutes";
 import buyerRoutes from "./routes/buyerRoutes";
 import sellerRoutes from "./routes/sellerRoutes";
@@ -19,6 +21,12 @@ app.use(express.json());
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
+// Rutas públicas: registro y login
+app.use("/api/auth", authRoutes);
+
+// A partir de aquí, TODO bajo /api exige token válido (RG-01)
+app.use("/api", authenticate);
 
 app.use("/api/users", userRoutes);
 app.use("/api/buyers", buyerRoutes);

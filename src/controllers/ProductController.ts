@@ -1,18 +1,33 @@
 import { Request, Response } from "express";
 import { ProductService } from "../services/ProductService";
-import { ProductType, ProductStatus } from "../models/Product";
+import { Product, ProductType, ProductStatus } from "../models/Product";
+import { AuthUser } from "../models/AuthUser";
+import { UserRole } from "../models/User";
+import { getAuthUser } from "../middlewares/authenticate";
+
+// ADMIN puede gestionar cualquier producto; un SELLER solo los suyos
+function canManageProduct(authUser: AuthUser, product: Product): boolean {
+  return authUser.role === UserRole.ADMIN || product.sellerId === authUser.id;
+}
 
 export const ProductController = {
   create(req: Request, res: Response): void {
     try {
-      const { sellerId, name, description, price, type } = req.body as {
-        sellerId: string;
+      const authUser = getAuthUser(res);
+      const { name, description, price, type } = req.body as {
         name: string;
         description: string;
         price: number;
         type: ProductType;
       };
-      const product = ProductService.createProduct({ sellerId, name, description, price, type });
+      // El vendedor dueño es SIEMPRE quien está autenticado, nunca lo que diga el body
+      const product = ProductService.createProduct({
+        sellerId: authUser.id,
+        name,
+        description,
+        price,
+        type,
+      });
       res.status(201).json(product);
     } catch (error) {
       res.status(400).json({ message: (error as Error).message });
@@ -54,6 +69,13 @@ export const ProductController = {
         res.status(400).json({ message: "El parámetro 'id' es requerido." });
         return;
       }
+
+      const product = ProductService.getProductById(id);
+      if (!canManageProduct(getAuthUser(res), product)) {
+        res.status(403).json({ message: "Solo puedes modificar tus propios productos." });
+        return;
+      }
+
       const { name, value } = req.body as { name: string; value: string };
       const updated = ProductService.addVariant(id, name, value);
       res.status(200).json(updated);
@@ -69,6 +91,13 @@ export const ProductController = {
         res.status(400).json({ message: "El parámetro 'id' es requerido." });
         return;
       }
+
+      const product = ProductService.getProductById(id);
+      if (!canManageProduct(getAuthUser(res), product)) {
+        res.status(403).json({ message: "Solo puedes modificar tus propios productos." });
+        return;
+      }
+
       const { status } = req.body as { status: ProductStatus };
       const updated = ProductService.changeStatus(id, status);
       res.status(200).json(updated);

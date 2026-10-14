@@ -1,12 +1,24 @@
 import { Request, Response } from "express";
 import { UserService } from "../services/UserService";
 import { UserRole, UserStatus } from "../models/User";
+import { AuthService } from "../services/AuthService";
 
 export const UserController = {
   create(req: Request, res: Response): void {
     try {
-      const { fullName, email, role } = req.body;
-      const newUser = UserService.createUser({ fullName, email, role });
+      const { fullName, email, password, role } = req.body as {
+        fullName: string;
+        email: string;
+        password: string;
+        role: UserRole;
+      };
+
+      if (!Object.values(UserRole).includes(role)) {
+        res.status(400).json({ message: "Rol inválido." });
+        return;
+      }
+
+      const newUser = AuthService.registerUser({ fullName, email, password, role });
       res.status(201).json(newUser);
     } catch (error) {
       res.status(400).json({ message: (error as Error).message });

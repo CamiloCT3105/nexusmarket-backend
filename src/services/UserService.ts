@@ -35,6 +35,10 @@ export const UserService = {
     return user;
   },
 
+    findUserByEmail(email: string): User | undefined {
+    return UserRepository.findByEmail(email);
+  },
+
   changeStatus(id: string, newStatus: UserStatus): User {
     const user = this.getUserById(id); // se valida existencia reutilizando validador.
     const updated = UserRepository.update(id, { status: newStatus });

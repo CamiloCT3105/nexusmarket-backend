@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { ReturnRequest, ReturnStatus } from "../models/ReturnRequest";
 import { OrderStatus } from "../models/Order";
-import { UserRole } from "../models/User";
 import { ReturnRepository } from "../repositories/ReturnRepository";
 import { OrderService } from "./OrderService";
 import { InventoryService } from "./InventoryService";
@@ -75,11 +74,7 @@ export const ReturnService = {
     return ReturnRepository.findByOrderId(orderId);
   },
 
-  processReturn(returnId: string, approve: boolean, actingUserRole: UserRole): ReturnRequest {
-    if (actingUserRole !== UserRole.ADMIN && actingUserRole !== UserRole.SELLER) {
-      throw new Error("Solo un Administrador o un Vendedor puede procesar devoluciones.");
-    }
-
+  processReturn(returnId: string, approve: boolean): ReturnRequest {
     const request = this.getReturnById(returnId);
     if (request.status !== ReturnStatus.REQUESTED) {
       throw new Error("Esta devolución ya fue procesada.");
