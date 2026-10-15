@@ -46,6 +46,10 @@ export const ProductService = {
     return ProductRepository.findBySellerId(sellerId);
   },
 
+  listProducts(): Product[] {
+    return ProductRepository.findAll();
+  },
+
   addVariant(productId: string, variantName: string, variantValue: string): Product {
     const product = this.getProductById(productId);
 

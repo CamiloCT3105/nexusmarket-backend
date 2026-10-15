@@ -43,4 +43,8 @@ export const InvoiceService = {
     }
     return invoice;
   },
+
+  listInvoices(): Invoice[] {
+    return InvoiceRepository.findAll();
+  },
 };

@@ -11,6 +11,10 @@ export const ShipmentRepository = {
     return shipments.find((shipment) => shipment.orderId === orderId);
   },
 
+  findAll(): Shipment[] {
+    return [...shipments];
+  },
+
   create(shipment: Shipment): Shipment {
     shipments.push(shipment);
     return shipment;

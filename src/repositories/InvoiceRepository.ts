@@ -11,6 +11,10 @@ export const InvoiceRepository = {
     return invoices.find((invoice) => invoice.orderId === orderId);
   },
 
+  findAll(): Invoice[] {
+    return [...invoices];
+  },
+
   create(invoice: Invoice): Invoice {
     invoices.push(invoice);
     return invoice;

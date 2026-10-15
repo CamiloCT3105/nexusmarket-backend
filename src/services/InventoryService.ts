@@ -127,6 +127,10 @@ export const InventoryService = {
     return item;
   },
 
+  listItems(): InventoryItem[] {
+    return InventoryRepository.findAllItems();
+  },
+
     // Busca, entre las bodegas indicadas, la primera que tenga stock disponible suficiente
   findWarehouseWithStock(
     productId: string,

@@ -35,7 +35,11 @@ export const UserService = {
     return user;
   },
 
-    findUserByEmail(email: string): User | undefined {
+  listUsers(): User[] {
+    return UserRepository.findAll();
+  },
+
+  findUserByEmail(email: string): User | undefined {
     return UserRepository.findByEmail(email);
   },
 

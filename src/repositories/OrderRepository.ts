@@ -11,6 +11,10 @@ export const OrderRepository = {
     return orders.filter((order) => order.buyerId === buyerId);
   },
 
+  findAll(): Order[] {
+    return [...orders];
+  },
+
   create(order: Order): Order {
     orders.push(order);
     return order;
