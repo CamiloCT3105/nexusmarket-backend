@@ -10,6 +10,10 @@ export const InventoryRepository = {
     );
   },
 
+  findAllItems(): InventoryItem[] {
+    return [...inventoryItems];
+  },
+
   createItem(item: InventoryItem): InventoryItem {
     inventoryItems.push(item);
     return item;

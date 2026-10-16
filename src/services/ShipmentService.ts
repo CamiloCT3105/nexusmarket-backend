@@ -56,6 +56,10 @@ export const ShipmentService = {
     return shipment;
   },
 
+  listShipments(): Shipment[] {
+    return ShipmentRepository.findAll();
+  },
+
   updateStatus(shipmentId: string, newStatus: ShipmentStatus, note?: string): Shipment {
     const shipment = this.getShipmentById(shipmentId);
 

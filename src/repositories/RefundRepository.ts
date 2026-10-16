@@ -11,6 +11,10 @@ export const RefundRepository = {
     return refunds.find((refund) => refund.returnId === returnId);
   },
 
+  findAll(): Refund[] {
+    return [...refunds];
+  },
+
   create(refund: Refund): Refund {
     refunds.push(refund);
     return refund;

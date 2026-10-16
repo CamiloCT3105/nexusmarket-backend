@@ -13,6 +13,7 @@ import invoiceRoutes from "./routes/invoiceRoutes";
 import shipmentRoutes from "./routes/shipmentRoutes";
 import returnRoutes from "./routes/returnRoutes";
 import refundRoutes from "./routes/refundRoutes";
+import reportRoutes from "./routes/reportRoutes";
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use("/api/auth", authRoutes);
 
 // A partir de aquí, TODO bajo /api exige token válido (RG-01)
 app.use("/api", authenticate);
+app.use("/api/reports", reportRoutes);
 
 app.use("/api/users", userRoutes);
 app.use("/api/buyers", buyerRoutes);

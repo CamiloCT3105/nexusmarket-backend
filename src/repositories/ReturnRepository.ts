@@ -17,6 +17,10 @@ export const ReturnRepository = {
     );
   },
 
+  findAll(): ReturnRequest[] {
+    return [...returns];
+  },
+
   create(request: ReturnRequest): ReturnRequest {
     returns.push(request);
     return request;

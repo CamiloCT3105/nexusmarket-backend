@@ -84,6 +84,10 @@ export const OrderService = {
     return OrderRepository.findByBuyerId(buyerId);
   },
 
+  listOrders(): Order[] {
+    return OrderRepository.findAll();
+  },
+
   changeStatus(orderId: string, newStatus: OrderStatus): Order {
     const order = this.getOrderById(orderId);
 

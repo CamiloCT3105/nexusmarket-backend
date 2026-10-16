@@ -74,6 +74,10 @@ export const ReturnService = {
     return ReturnRepository.findByOrderId(orderId);
   },
 
+  listReturns(): ReturnRequest[] {
+    return ReturnRepository.findAll();
+  },
+
   processReturn(returnId: string, approve: boolean): ReturnRequest {
     const request = this.getReturnById(returnId);
     if (request.status !== ReturnStatus.REQUESTED) {

@@ -47,6 +47,10 @@ export const RefundService = {
     return refund;
   },
 
+  listRefunds(): Refund[] {
+    return RefundRepository.findAll();
+  },
+
   updateStatus(refundId: string, newStatus: RefundStatus): Refund {
     const refund = this.getRefundById(refundId);
 
