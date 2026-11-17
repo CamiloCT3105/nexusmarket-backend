@@ -1,6 +1,6 @@
 import { User, UserRole, UserStatus } from "../models/User";
 import { CredentialRepository } from "../repositories/CredentialRepository";
-import { UserService } from "./UserService";
+import { PENDING_DOCUMENT_PREFIX, UserService } from "./UserService";
 import { hashPassword, verifyPassword } from "../utils/password";
 import { signToken } from "../utils/jwt";
 import { env } from "../config/env";
@@ -10,6 +10,7 @@ import { ForbiddenError, UnauthorizedError, ValidationError } from "../errors/Ap
 type RegisterUserInput = {
   fullName: string;
   email: string;
+  documentNumber: string;
   password: string;
   role: UserRole;
 };
@@ -33,6 +34,7 @@ export const AuthService = {
       const user = await UserService.createUser({
         fullName: input.fullName,
         email: input.email,
+        documentNumber: input.documentNumber,
         role: input.role,
       });
 
@@ -76,11 +78,25 @@ export const AuthService = {
       console.warn("ADMIN_EMAIL / ADMIN_PASSWORD no configurados: no se creó administrador.");
       return;
     }
-    if (await UserService.findUserByEmail(env.adminEmail)) return;
+    const existing = await UserService.findUserByEmail(env.adminEmail);
+    if (existing) {
+      // Administrador creado antes de existir el documento: se le asigna el del .env
+      if (existing.documentNumber.startsWith(PENDING_DOCUMENT_PREFIX) && env.adminDocumentNumber) {
+        await UserService.replacePendingDocument(existing.id, env.adminDocumentNumber);
+        console.log("Documento de identidad del administrador actualizado desde ADMIN_DOCUMENT_NUMBER.");
+      }
+      return;
+    }
+
+    if (!env.adminDocumentNumber) {
+      console.warn("ADMIN_DOCUMENT_NUMBER no configurado: no se creó administrador.");
+      return;
+    }
 
     await this.registerUser({
       fullName: "Administrador",
       email: env.adminEmail,
+      documentNumber: env.adminDocumentNumber,
       password: env.adminPassword,
       role: UserRole.ADMIN,
     });

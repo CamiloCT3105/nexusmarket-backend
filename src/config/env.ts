@@ -22,8 +22,16 @@ if (!mongoUrl) {
   );
 }
 
+// Orígenes (frontends) que pueden llamar a la API desde el navegador, separados por coma.
+// Por defecto, el servidor de desarrollo de Vite (React).
+const corsOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter((origin) => origin !== "");
+
 export const env = {
   databaseUrl,
+  corsOrigins,
   mongoUrl,
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || "development",
@@ -31,4 +39,5 @@ export const env = {
   jwtExpiresInSeconds: Number(process.env.JWT_EXPIRES_IN_SECONDS) || 28800,
   adminEmail: process.env.ADMIN_EMAIL,
   adminPassword: process.env.ADMIN_PASSWORD,
+  adminDocumentNumber: process.env.ADMIN_DOCUMENT_NUMBER,
 };

@@ -18,6 +18,7 @@ export interface User {
   id: string;
   fullName: string;
   email: string;
+  documentNumber: string; // documento de identidad, único en la plataforma
   role: UserRole;
   status: UserStatus;
 }

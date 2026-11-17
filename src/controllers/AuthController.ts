@@ -6,12 +6,13 @@ import { getAuthUser } from "../middlewares/authenticate";
 // Los errores no se capturan aquí: Express 5 los envía al middleware central (errorHandler)
 export const AuthController = {
   async register(req: Request, res: Response): Promise<void> {
-    const { fullName, email, password } = req.body as {
+    const { fullName, email, documentNumber, password } = req.body as {
       fullName: string;
       email: string;
+      documentNumber: string;
       password: string;
     };
-    const user = await AuthService.registerBuyerAccount({ fullName, email, password });
+    const user = await AuthService.registerBuyerAccount({ fullName, email, documentNumber, password });
     res.status(201).json(user);
   },
 

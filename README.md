@@ -86,10 +86,12 @@ MongoDB se publica en el puerto **27018** del equipo (no en el 27017 habitual) p
 | `JWT_EXPIRES_IN_SECONDS` | No | Duración del token en segundos. | `28800` (8 horas) |
 | `ADMIN_EMAIL` | Recomendada | Correo del administrador que se crea al arrancar. | — |
 | `ADMIN_PASSWORD` | Recomendada | Contraseña de ese administrador (mínimo 8 caracteres). | — |
+| `ADMIN_DOCUMENT_NUMBER` | Recomendada | Documento de identidad de ese administrador (único). Si el administrador ya existía con un documento temporal (`PENDIENTE-…`), se le asigna este al arrancar. | — |
+| `CORS_ORIGIN` | No | Frontends que pueden llamar a la API desde el navegador, separados por coma. | `http://localhost:5173` (Vite) |
 | `DATABASE_URL` | **Sí** | Conexión a PostgreSQL. Si falta, el servidor no arranca. | ver `.env.example` |
 | `MONGO_URL` | **Sí** | Conexión a MongoDB. Si falta, el servidor no arranca. | ver `.env.example` |
 
-Si `ADMIN_EMAIL` y `ADMIN_PASSWORD` no están definidos, no se crea ningún administrador y no habrá forma de crear vendedores ni otros roles.
+Si `ADMIN_EMAIL`, `ADMIN_PASSWORD` o `ADMIN_DOCUMENT_NUMBER` no están definidos, no se crea ningún administrador y no habrá forma de crear vendedores ni otros roles.
 
 **El archivo `.env` nunca debe subirse a GitHub.** Con el `JWT_SECRET` cualquiera podría fabricar tokens válidos. El repositorio incluye `.env.example` como plantilla, sin valores reales.
 
@@ -105,6 +107,20 @@ Si `ADMIN_EMAIL` y `ADMIN_PASSWORD` no están definidos, no se crea ningún admi
 | `npm run db:migrate` | Crea o aplica migraciones en desarrollo (`prisma migrate dev`). |
 | `npm run db:deploy` | Aplica migraciones pendientes sin crear nuevas (producción). |
 | `npm run db:studio` | Abre Prisma Studio para ver y editar los datos en el navegador. |
+| `npm test` | Ejecuta las pruebas de punta a punta (ver abajo). |
+
+## Pruebas
+
+```bash
+npm test
+```
+
+Corre más de 300 comprobaciones de punta a punta contra un servidor real y bases de datos reales: flujo completo de compra, concurrencia (sobreventa, deadlocks, doble despacho), posventa, reportes con cifras exactas, catálogo y listados por rol, CORS y persistencia tras reiniciar.
+
+- Requiere Docker con las bases levantadas (`npm run db:up`).
+- Usa **bases de prueba separadas** (`nexusmarket_e2e`), que se vacían al empezar: tus datos de desarrollo no se tocan. El runner se niega a correr si el nombre de la base no contiene `e2e` o `test`.
+- Cualquier error `500` inesperado en el servidor cuenta como fallo.
+- Las suites están en [`tests/e2e/`](./tests/e2e).
 
 ## Estructura del proyecto
 
@@ -159,7 +175,7 @@ La respuesta incluye un `token`.
 curl -X POST http://localhost:3000/api/users \
   -H "Authorization: Bearer TU_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"fullName":"Laura Vendedora","email":"laura@example.com","password":"clave12345","role":"SELLER"}'
+  -d '{"fullName":"Laura Vendedora","email":"laura@example.com","documentNumber":"1020304050","password":"clave12345","role":"SELLER"}'
 ```
 
 > En Windows PowerShell, `curl` es un alias de otro comando; usa `curl.exe`, o mejor una herramienta como Postman o Thunder Client.
@@ -208,7 +224,7 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| POST | `/register` | Público (crea un comprador) |
+| POST | `/register` | Público (crea un comprador). Body: `fullName`, `email`, `documentNumber`, `password` |
 | POST | `/login` | Público |
 | GET | `/me` | Autenticado |
 
@@ -218,6 +234,7 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 |---|---|---|
 | POST | `/` | Admin |
 | GET | `/:id` | Propio, Admin, Supervisor |
+| GET | `/` | Admin, Supervisor — listado con `?role=&status=&search=` (nombre, correo o documento) |
 | PATCH | `/:id/status` | Admin |
 | PATCH | `/:id/role` | Admin |
 
@@ -244,6 +261,7 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 |---|---|---|
 | POST | `/` | Vendedor |
 | GET | `/:id` | Autenticado |
+| GET | `/` | Autenticado — **catálogo**: `?search=&type=&sellerId=&minPrice=&maxPrice=&status=&sort=` (`newest`, `price_asc`, `price_desc`, `name_asc`). El comprador y el operador logístico ven solo publicados; el vendedor, además, los suyos en cualquier estado; supervisor y admin, todos |
 | GET | `/seller/:sellerId` | Autenticado |
 | PATCH | `/:id/variants` | Vendedor (propio), Admin |
 | PATCH | `/:id/status` | Vendedor (propio), Admin |
@@ -253,6 +271,7 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 | Método | Ruta | Acceso |
 |---|---|---|
 | POST | `/` | Vendedor (propia), Admin |
+| GET | `/` | Operador Logístico, Supervisor, Admin — `?type=&sellerId=` |
 | GET | `/:id` | Vendedor (propia), Operador Logístico, Supervisor, Admin |
 | GET | `/seller/:sellerId` | Propio, Operador Logístico, Supervisor, Admin |
 | PATCH | `/:id/link-seller` | Admin |
@@ -261,8 +280,9 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| POST | `/inbound` | Vendedor (bodega propia), Admin |
-| POST | `/damaged` | Vendedor (bodega propia), Admin |
+| GET | `/` | Vendedor (solo sus bodegas), Operador Logístico, Supervisor, Admin — `?productId=&warehouseId=` |
+| POST | `/inbound` | Vendedor (bodega propia), Operador Logístico, Admin |
+| POST | `/damaged` | Vendedor (bodega propia), Operador Logístico, Admin |
 | POST | `/reserve` | Admin (operación interna) |
 | POST | `/outbound` | Admin (operación interna) |
 | POST | `/return` | Admin (operación interna) |
@@ -282,8 +302,9 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 | Método | Ruta | Acceso |
 |---|---|---|
 | POST | `/checkout` | Comprador |
+| GET | `/` | Todos — `?status=&buyerId=&from=&to=`. Comprador: los suyos; **vendedor: los que incluyen sus productos, solo con sus líneas y `sellerSubtotal`**; operador, supervisor y admin: todos |
 | GET | `/buyer/:buyerId` | Propio, Admin, Supervisor |
-| GET | `/:id` | Comprador (propio), Operador Logístico, Supervisor, Admin |
+| GET | `/:id` | Comprador (propio), Vendedor (solo sus líneas), Operador Logístico, Supervisor, Admin |
 | POST | `/:id/pay` | Comprador (propio) |
 | PATCH | `/:id/status` | Admin |
 
@@ -293,6 +314,7 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 |---|---|---|
 | POST | `/` | Admin |
 | GET | `/:id` | Comprador (propia), Supervisor, Admin |
+| GET | `/` | Comprador (las suyas), Supervisor, Admin |
 | GET | `/order/:orderId` | Comprador (propia), Supervisor, Admin |
 
 ### Envíos — `/api/shipments`
@@ -300,6 +322,7 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 | Método | Ruta | Acceso |
 |---|---|---|
 | POST | `/` | Operador Logístico, Admin |
+| GET | `/` | Operador Logístico, Supervisor, Admin — `?status=` |
 | GET | `/:id` | Comprador (propio), Operador Logístico, Supervisor, Admin |
 | GET | `/order/:orderId` | Comprador (propio), Operador Logístico, Supervisor, Admin |
 | PATCH | `/:id/status` | Operador Logístico, Admin |
@@ -310,6 +333,7 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 |---|---|---|
 | POST | `/` | Comprador |
 | GET | `/:id` | Comprador (propia), Vendedor (de sus productos), Supervisor, Admin |
+| GET | `/` | Comprador (de sus pedidos), Vendedor (de sus productos), Supervisor, Admin — `?status=` |
 | GET | `/order/:orderId` | Comprador (propio), Supervisor, Admin |
 | PATCH | `/:id/process` | Vendedor (de sus productos), Admin |
 
@@ -317,6 +341,7 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 
 | Método | Ruta | Acceso |
 |---|---|---|
+| GET | `/` | Comprador (los suyos), Supervisor, Admin — `?status=` |
 | GET | `/:id` | Comprador (propio), Supervisor, Admin |
 | GET | `/return/:returnId` | Comprador (propio), Supervisor, Admin |
 | PATCH | `/:id/status` | Admin |
@@ -332,6 +357,8 @@ Solo lectura. Acceso: Supervisor y Admin.
 | GET | `/inventory` | Existencias con alerta de stock bajo. Parámetro opcional `threshold` |
 | GET | `/logistics` | Envíos por estado y pedidos pendientes de envío |
 | GET | `/returns` | Devoluciones y reembolsos |
+
+> Los listados (`GET /` de cada módulo) aceptan `?page=` y `?pageSize=` (máximo 100) y responden `{ items, page, pageSize, total, totalPages }`. Cada rol solo ve lo que le corresponde.
 
 ### Códigos de respuesta
 
@@ -365,8 +392,9 @@ Este proyecto es una base funcional, no un sistema listo para producción:
 
 - **Sin transacciones entre PostgreSQL y MongoDB**: la bitácora de movimientos se escribe justo después de confirmar en PostgreSQL; si MongoDB fallara en ese instante, el movimiento se perdería.
 - El **pago es simulado**: solo cambia el estado del pedido.
-- La **validación de entradas es limitada**: no se verifica que los valores de enums enviados en el body sean válidos.
-- **Sin límite de intentos de login**, sin paginación y sin pruebas automatizadas.
+- **Productos digitales**: pasan por inventario y envío como los físicos (la especificación pide entrega inmediata tras el pago; queda para una fase posterior).
+- La **validación de entradas** se hace a mano en los servicios, sin una librería de esquemas.
+- **Sin límite de intentos de login**.
 - El dinero se maneja como `number`; en producción conviene usar enteros en centavos.
 
 La lista completa está en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-limitaciones-conocidas).
@@ -380,8 +408,11 @@ La lista completa está en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-li
 - [x] Facturas, envíos, devoluciones y reembolsos en PostgreSQL (transaccionales); reportes con consultas SQL agregadas
 - [x] Catálogo, carritos y movimientos de inventario en MongoDB
 - [ ] Validación de entradas con una librería (por ejemplo, `zod`)
-- [ ] Pruebas automatizadas
+- [x] Pruebas automatizadas de punta a punta (`npm test`)
+- [x] Preparación para el frontend: CORS, catálogo con filtros y listados paginados por rol
+- [x] Documento de identidad único, operador logístico en inventario y pedidos visibles para el vendedor (brechas con la especificación)
 - [ ] Frontend en React + TypeScript (repositorio separado)
+- [ ] Productos digitales con entrega inmediata tras el pago
 
 ## Licencia
 

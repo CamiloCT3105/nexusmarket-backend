@@ -16,6 +16,7 @@ router.get(
   authorize(UserRole.BUYER, UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.SELLER),
   ReturnController.getById
 );
+router.get("/", authorize(UserRole.BUYER, UserRole.SELLER, UserRole.ADMIN, UserRole.SUPERVISOR), ReturnController.list);
 router.patch("/:id/process", authorize(UserRole.SELLER, UserRole.ADMIN), ReturnController.process);
 
 export default router;

@@ -2,24 +2,34 @@ import { Request, Response } from "express";
 import { UserService } from "../services/UserService";
 import { UserRole, UserStatus } from "../models/User";
 import { AuthService } from "../services/AuthService";
-import { ValidationError } from "../errors/AppError";
 import { requireParam } from "../utils/params";
+import { optionalEnum, optionalString, pageRequest } from "../utils/query";
 
 export const UserController = {
   async create(req: Request, res: Response): Promise<void> {
-    const { fullName, email, password, role } = req.body as {
+    const { fullName, email, documentNumber, password, role } = req.body as {
       fullName: string;
       email: string;
+      documentNumber: string;
       password: string;
       role: UserRole;
     };
 
-    if (!Object.values(UserRole).includes(role)) {
-      throw new ValidationError("Rol inválido.");
-    }
-
-    const newUser = await AuthService.registerUser({ fullName, email, password, role });
+    const newUser = await AuthService.registerUser({ fullName, email, documentNumber, password, role });
     res.status(201).json(newUser);
+  },
+
+  // GET /api/users?role=&status=&search=&page=&pageSize=
+  async list(req: Request, res: Response): Promise<void> {
+    const page = await UserService.listUsersPage(
+      {
+        role: optionalEnum(req, "role", Object.values(UserRole)),
+        status: optionalEnum(req, "status", Object.values(UserStatus)),
+        search: optionalString(req, "search"),
+      },
+      pageRequest(req)
+    );
+    res.status(200).json(page);
   },
 
   async getById(req: Request, res: Response): Promise<void> {

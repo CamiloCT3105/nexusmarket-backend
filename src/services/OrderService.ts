@@ -1,12 +1,15 @@
 import { randomUUID } from "crypto";
 import { Order, OrderItem, OrderStatus } from "../models/Order";
 import { ProductStatus } from "../models/Product";
-import { OrderRepository } from "../repositories/OrderRepository";
+import { OrderFilter, OrderRepository } from "../repositories/OrderRepository";
+import { AuthUser } from "../models/AuthUser";
+import { UserRole } from "../models/User";
+import { Page, PageRequest, toPage } from "../utils/pagination";
 import { CartService } from "./CartService";
 import { ProductService } from "./ProductService";
 import { WarehouseService } from "./WarehouseService";
 import { InventoryService } from "./InventoryService";
-import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../errors/AppError";
 import { transaction } from "../db/transaction";
 
 // Define qué cambios de estado son válidos desde cada estado.
@@ -27,6 +30,23 @@ function byInventoryRow(a: OrderItem, b: OrderItem): number {
 // Redondeo a centavos para que la suma no arrastre errores de punto flotante
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+// Lo que ve un vendedor de un pedido: solo sus líneas y el subtotal de ellas
+export type OrderView = Order & { sellerSubtotal?: number };
+
+async function sellerProductIds(sellerId: string): Promise<Set<string>> {
+  const products = await ProductService.getProductsBySeller(sellerId);
+  return new Set(products.map((product) => product.id));
+}
+
+function sellerView(order: Order, productIds: Set<string>): OrderView {
+  const items = order.items.filter((item) => productIds.has(item.productId));
+  return {
+    ...order,
+    items,
+    sellerSubtotal: roundMoney(items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)),
+  };
 }
 
 export const OrderService = {
@@ -103,6 +123,48 @@ export const OrderService = {
   async lockOrder(id: string): Promise<void> {
     if (!(await OrderRepository.lockForUpdate(id))) {
       throw new NotFoundError("Pedido no encontrado.");
+    }
+  },
+
+  // Listado paginado según quién consulta:
+  // - Comprador: solo sus pedidos.
+  // - Vendedor: pedidos que incluyen sus productos, mostrando SOLO sus líneas y su subtotal
+  //   (matriz de responsabilidades: el vendedor participa en la gestión de pedidos).
+  // - Administrador, supervisor y operador logístico: todos.
+  async listOrdersForViewer(viewer: AuthUser, filter: OrderFilter, request: PageRequest): Promise<Page<OrderView>> {
+    switch (viewer.role) {
+      case UserRole.BUYER:
+        if (filter.buyerId && filter.buyerId !== viewer.id) {
+          throw new ForbiddenError("Solo puedes consultar tus propios pedidos.");
+        }
+        return OrderRepository.findPage({ ...filter, buyerId: viewer.id }, request);
+      case UserRole.SELLER: {
+        const productIds = await sellerProductIds(viewer.id);
+        if (productIds.size === 0) return toPage([], 0, request);
+        const page = await OrderRepository.findPage({ ...filter, withAnyProduct: [...productIds] }, request);
+        return { ...page, items: page.items.map((order) => sellerView(order, productIds)) };
+      }
+      default:
+        return OrderRepository.findPage(filter, request);
+    }
+  },
+
+  // Detalle de un pedido con las mismas reglas de visibilidad que el listado
+  async getOrderForViewer(viewer: AuthUser, id: string): Promise<OrderView> {
+    const order = await this.getOrderById(id);
+    switch (viewer.role) {
+      case UserRole.BUYER:
+        if (order.buyerId !== viewer.id) throw new ForbiddenError("Solo puedes consultar tus propios pedidos.");
+        return order;
+      case UserRole.SELLER: {
+        const productIds = await sellerProductIds(viewer.id);
+        if (!order.items.some((item) => productIds.has(item.productId))) {
+          throw new ForbiddenError("Este pedido no incluye productos tuyos.");
+        }
+        return sellerView(order, productIds);
+      }
+      default:
+        return order;
     }
   },
 

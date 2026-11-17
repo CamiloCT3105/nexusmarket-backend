@@ -7,6 +7,11 @@ import { InventoryService } from "./InventoryService";
 import { RefundService } from "./RefundService";
 import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
 import { transaction } from "../db/transaction";
+import { ReturnFilter } from "../repositories/ReturnRepository";
+import { ProductService } from "./ProductService";
+import { AuthUser } from "../models/AuthUser";
+import { UserRole } from "../models/User";
+import { Page, PageRequest, toPage } from "../utils/pagination";
 
 type RegisterReturnInput = {
   orderId: string;
@@ -74,6 +79,26 @@ export const ReturnService = {
 
   async getReturnsByOrder(orderId: string): Promise<ReturnRequest[]> {
     return ReturnRepository.findByOrderId(orderId);
+  },
+
+  // Listado según quién consulta: el comprador ve las de sus pedidos; el vendedor, las de
+  // sus productos (para procesarlas); administrador y supervisor, todas.
+  async listReturnsForViewer(
+    viewer: AuthUser,
+    filter: Pick<ReturnFilter, "status">,
+    request: PageRequest
+  ): Promise<Page<ReturnRequest>> {
+    switch (viewer.role) {
+      case UserRole.BUYER:
+        return ReturnRepository.findPage({ ...filter, buyerId: viewer.id }, request);
+      case UserRole.SELLER: {
+        const products = await ProductService.getProductsBySeller(viewer.id);
+        if (products.length === 0) return toPage([], 0, request);
+        return ReturnRepository.findPage({ ...filter, productIds: products.map((p) => p.id) }, request);
+      }
+      default:
+        return ReturnRepository.findPage(filter, request);
+    }
   },
 
   async listReturns(): Promise<ReturnRequest[]> {

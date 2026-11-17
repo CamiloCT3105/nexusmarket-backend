@@ -4,6 +4,9 @@ import { OrderStatus } from "../models/Order";
 import { InvoiceRepository } from "../repositories/InvoiceRepository";
 import { OrderService } from "./OrderService";
 import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
+import { AuthUser } from "../models/AuthUser";
+import { UserRole } from "../models/User";
+import { Page, PageRequest } from "../utils/pagination";
 
 export const InvoiceService = {
   async generateInvoice(orderId: string): Promise<Invoice> {
@@ -43,6 +46,12 @@ export const InvoiceService = {
       throw new NotFoundError("No existe una factura para este pedido.");
     }
     return invoice;
+  },
+
+  // El comprador ve solo sus facturas; administrador y supervisor, todas
+  async listInvoicesForViewer(viewer: AuthUser, request: PageRequest): Promise<Page<Invoice>> {
+    const buyerId = viewer.role === UserRole.BUYER ? viewer.id : undefined;
+    return InvoiceRepository.findPage({ buyerId }, request);
   },
 
   async listInvoices(): Promise<Invoice[]> {

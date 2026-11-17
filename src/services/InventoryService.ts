@@ -6,6 +6,10 @@ import { ProductService } from "./ProductService";
 import { WarehouseService } from "./WarehouseService";
 import { NotFoundError, ValidationError } from "../errors/AppError";
 import { afterCommit } from "../db/transaction";
+import { InventoryFilter } from "../repositories/InventoryRepository";
+import { AuthUser } from "../models/AuthUser";
+import { UserRole } from "../models/User";
+import { Page, PageRequest, toPage } from "../utils/pagination";
 
 const NO_INVENTORY_MESSAGE = "No existe inventario registrado para este producto en esta bodega.";
 
@@ -96,6 +100,20 @@ export const InventoryService = {
       throw new NotFoundError(NO_INVENTORY_MESSAGE);
     }
     return item;
+  },
+
+  // Existencias paginadas: el vendedor solo ve sus bodegas; operador, supervisor y admin, todas
+  async listInventoryForViewer(
+    viewer: AuthUser,
+    filter: Pick<InventoryFilter, "productId" | "warehouseId">,
+    request: PageRequest
+  ): Promise<Page<InventoryItem>> {
+    if (viewer.role === UserRole.SELLER) {
+      const warehouses = await WarehouseService.getWarehousesBySeller(viewer.id);
+      if (warehouses.length === 0) return toPage([], 0, request);
+      return InventoryRepository.findPage({ ...filter, warehouseIds: warehouses.map((w) => w.id) }, request);
+    }
+    return InventoryRepository.findPage(filter, request);
   },
 
   async listItems(): Promise<InventoryItem[]> {

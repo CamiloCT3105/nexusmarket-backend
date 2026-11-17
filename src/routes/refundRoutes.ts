@@ -15,6 +15,7 @@ router.get(
   authorize(UserRole.BUYER, UserRole.ADMIN, UserRole.SUPERVISOR),
   RefundController.getById
 );
+router.get("/", authorize(UserRole.BUYER, UserRole.ADMIN, UserRole.SUPERVISOR), RefundController.list);
 router.patch("/:id/status", authorize(UserRole.ADMIN), RefundController.updateStatus);
 
 export default router;

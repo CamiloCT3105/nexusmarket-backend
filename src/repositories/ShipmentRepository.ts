@@ -2,6 +2,7 @@ import { Shipment, ShipmentEvent, ShipmentStatus } from "../models/Shipment";
 import { db } from "../db/transaction";
 import { Prisma } from "../generated/prisma/client";
 import { isUuid } from "../db/ids";
+import { Page, PageRequest, skipTake, toPage } from "../utils/pagination";
 
 // PostgreSQL: tablas shipments + shipment_events (historial, una fila por cambio de estado)
 
@@ -28,6 +29,15 @@ function toShipment(row: ShipmentRow): Shipment {
 }
 
 export const ShipmentRepository = {
+  async findPage(filter: { status?: ShipmentStatus | undefined }, request: PageRequest): Promise<Page<Shipment>> {
+    const where: Prisma.ShipmentWhereInput = filter.status ? { status: filter.status } : {};
+    const [rows, total] = await Promise.all([
+      db().shipment.findMany({ where, orderBy: { trackingCode: "asc" }, ...skipTake(request), ...shipmentWithEvents }),
+      db().shipment.count({ where }),
+    ]);
+    return toPage(rows.map(toShipment), total, request);
+  },
+
   async findById(id: string): Promise<Shipment | undefined> {
     if (!isUuid(id)) return undefined;
     const row = await db().shipment.findUnique({ where: { id }, ...shipmentWithEvents });

@@ -5,8 +5,21 @@ import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
 import { ForbiddenError } from "../errors/AppError";
 import { requireParam } from "../utils/params";
+import { optionalEnum, optionalString, pageRequest } from "../utils/query";
 
 export const WarehouseController = {
+  // GET /api/warehouses?type=&sellerId=&page=&pageSize=
+  async list(req: Request, res: Response): Promise<void> {
+    const page = await WarehouseService.listWarehousesPage(
+      {
+        type: optionalEnum(req, "type", Object.values(WarehouseType)),
+        sellerId: optionalString(req, "sellerId"),
+      },
+      pageRequest(req)
+    );
+    res.status(200).json(page);
+  },
+
   async create(req: Request, res: Response): Promise<void> {
     const authUser = getAuthUser(res);
     const { type, location, sellerId } = req.body as {

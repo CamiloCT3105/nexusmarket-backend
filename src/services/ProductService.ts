@@ -1,8 +1,11 @@
 import { randomUUID } from "crypto";
 import { Product, ProductType, ProductStatus, Variant } from "../models/Product";
-import { ProductRepository } from "../repositories/ProductRepository";
+import { ProductFilter, ProductRepository, ProductSort } from "../repositories/ProductRepository";
 import { SellerService } from "./SellerService";
-import { NotFoundError, ValidationError } from "../errors/AppError";
+import { ForbiddenError, NotFoundError, ValidationError } from "../errors/AppError";
+import { AuthUser } from "../models/AuthUser";
+import { UserRole } from "../models/User";
+import { Page, PageRequest } from "../utils/pagination";
 
 type CreateProductInput = {
   sellerId: string;
@@ -72,6 +75,34 @@ export const ProductService = {
 
   async listProducts(): Promise<Product[]> {
     return ProductRepository.findAll();
+  },
+
+  // Catálogo paginado. Lo que se ve depende de quién consulta:
+  // - Comprador y operador logístico: solo productos publicados (catálogo público).
+  // - Vendedor: los publicados y los suyos en cualquier estado.
+  // - Administrador y supervisor: todos.
+  async searchCatalog(
+    viewer: AuthUser,
+    filter: Omit<ProductFilter, "onlyPublished" | "publishedOrOwnedBy">,
+    sort: ProductSort,
+    request: PageRequest
+  ): Promise<Page<Product>> {
+    if (filter.minPrice !== undefined && filter.maxPrice !== undefined && filter.minPrice > filter.maxPrice) {
+      throw new ValidationError("El parámetro 'minPrice' no puede ser mayor que 'maxPrice'.");
+    }
+
+    switch (viewer.role) {
+      case UserRole.ADMIN:
+      case UserRole.SUPERVISOR:
+        return ProductRepository.findPage(filter, sort, request);
+      case UserRole.SELLER:
+        return ProductRepository.findPage({ ...filter, publishedOrOwnedBy: viewer.id }, sort, request);
+      default:
+        if (filter.status && filter.status !== ProductStatus.PUBLISHED) {
+          throw new ForbiddenError("Solo puedes consultar productos publicados.");
+        }
+        return ProductRepository.findPage({ ...filter, onlyPublished: true }, sort, request);
+    }
   },
 
   async addVariant(productId: string, variantName: string, variantValue: string): Promise<Product> {

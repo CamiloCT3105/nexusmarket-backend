@@ -8,6 +8,8 @@ import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
 import { ForbiddenError, ValidationError } from "../errors/AppError";
 import { requireParam } from "../utils/params";
+import { optionalEnum, pageRequest } from "../utils/query";
+import { ReturnStatus } from "../models/ReturnRequest";
 
 // Quién puede ver o procesar una devolución concreta:
 // - ADMIN y SUPERVISOR: cualquiera
@@ -28,6 +30,16 @@ async function canAccessReturn(authUser: AuthUser, request: ReturnRequest): Prom
 }
 
 export const ReturnController = {
+  // GET /api/returns?status=&page=&pageSize=  (visibilidad según el rol)
+  async list(req: Request, res: Response): Promise<void> {
+    const page = await ReturnService.listReturnsForViewer(
+      getAuthUser(res),
+      { status: optionalEnum(req, "status", Object.values(ReturnStatus)) },
+      pageRequest(req)
+    );
+    res.status(200).json(page);
+  },
+
   async register(req: Request, res: Response): Promise<void> {
     const authUser = getAuthUser(res);
     const { orderId, productId, quantity, reason } = req.body as {

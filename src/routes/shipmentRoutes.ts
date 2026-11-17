@@ -16,6 +16,7 @@ router.get(
   authorize(UserRole.LOGISTICS_OPERATOR, UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.BUYER),
   ShipmentController.getById
 );
+router.get("/", authorize(UserRole.LOGISTICS_OPERATOR, UserRole.ADMIN, UserRole.SUPERVISOR), ShipmentController.list);
 router.patch(
   "/:id/status",
   authorize(UserRole.LOGISTICS_OPERATOR, UserRole.ADMIN),

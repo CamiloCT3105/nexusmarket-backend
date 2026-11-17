@@ -2,6 +2,7 @@ import { Order, OrderItem, OrderStatus } from "../models/Order";
 import { db } from "../db/transaction";
 import { Prisma } from "../generated/prisma/client";
 import { isUuid } from "../db/ids";
+import { Page, PageRequest, skipTake, toPage } from "../utils/pagination";
 
 // PostgreSQL: tablas orders + order_items.
 // El dinero se guarda como DECIMAL(12,2) y se convierte a number en el modelo de dominio.
@@ -30,7 +31,32 @@ function toOrder(row: OrderRow): Order {
   };
 }
 
+export type OrderFilter = {
+  status?: OrderStatus | undefined;
+  buyerId?: string | undefined;
+  from?: Date | undefined;
+  to?: Date | undefined;
+  withAnyProduct?: string[] | undefined; // pedidos que contienen al menos uno de estos productos
+};
+
 export const OrderRepository = {
+  async findPage(filter: OrderFilter, request: PageRequest): Promise<Page<Order>> {
+    if (filter.buyerId !== undefined && !isUuid(filter.buyerId)) return toPage([], 0, request);
+    const where: Prisma.OrderWhereInput = {
+      ...(filter.status ? { status: filter.status } : {}),
+      ...(filter.buyerId ? { buyerId: filter.buyerId } : {}),
+      ...(filter.from || filter.to
+        ? { createdAt: { ...(filter.from ? { gte: filter.from } : {}), ...(filter.to ? { lte: filter.to } : {}) } }
+        : {}),
+      ...(filter.withAnyProduct ? { items: { some: { productId: { in: filter.withAnyProduct } } } } : {}),
+    };
+    const [rows, total] = await Promise.all([
+      db().order.findMany({ where, orderBy: { createdAt: "desc" }, ...skipTake(request), ...orderWithItems }),
+      db().order.count({ where }),
+    ]);
+    return toPage(rows.map(toOrder), total, request);
+  },
+
   async findById(id: string): Promise<Order | undefined> {
     if (!isUuid(id)) return undefined;
     const row = await db().order.findUnique({ where: { id }, ...orderWithItems });

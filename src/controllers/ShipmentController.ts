@@ -7,6 +7,7 @@ import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
 import { ForbiddenError } from "../errors/AppError";
 import { requireParam } from "../utils/params";
+import { optionalEnum, pageRequest } from "../utils/query";
 
 // Un BUYER solo puede ver el envío de sus propios pedidos
 async function assertShipmentAccess(authUser: AuthUser, shipment: Shipment): Promise<void> {
@@ -18,6 +19,15 @@ async function assertShipmentAccess(authUser: AuthUser, shipment: Shipment): Pro
 }
 
 export const ShipmentController = {
+  // GET /api/shipments?status=&page=&pageSize=
+  async list(req: Request, res: Response): Promise<void> {
+    const page = await ShipmentService.listShipmentsPage(
+      { status: optionalEnum(req, "status", Object.values(ShipmentStatus)) },
+      pageRequest(req)
+    );
+    res.status(200).json(page);
+  },
+
   async create(req: Request, res: Response): Promise<void> {
     const { orderId } = req.body as { orderId: string };
     const shipment = await ShipmentService.createShipment(orderId);

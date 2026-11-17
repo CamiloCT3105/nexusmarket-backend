@@ -1,4 +1,6 @@
 import express from "express";
+import cors from "cors";
+import { env } from "./config/env";
 import { authenticate } from "./middlewares/authenticate";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler";
 import authRoutes from "./routes/authRoutes";
@@ -17,6 +19,17 @@ import refundRoutes from "./routes/refundRoutes";
 import reportRoutes from "./routes/reportRoutes";
 
 const app = express();
+
+// CORS: solo los orígenes configurados (CORS_ORIGIN) pueden llamar a la API desde un navegador.
+// La autenticación va en el header Authorization (no en cookies), por eso no se habilitan credenciales.
+app.use(
+  cors({
+    origin: env.corsOrigins,
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    maxAge: 600, // el navegador recuerda la respuesta del preflight 10 minutos
+  })
+);
 
 app.use(express.json());
 

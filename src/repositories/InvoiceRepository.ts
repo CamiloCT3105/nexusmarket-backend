@@ -2,6 +2,7 @@ import { Invoice } from "../models/Invoice";
 import { db } from "../db/transaction";
 import { Prisma } from "../generated/prisma/client";
 import { isUuid } from "../db/ids";
+import { Page, PageRequest, skipTake, toPage } from "../utils/pagination";
 
 // PostgreSQL: tabla invoices. order_id es UNIQUE: una factura por pedido,
 // garantizado por la base de datos aunque lleguen dos solicitudes a la vez.
@@ -19,6 +20,15 @@ function toInvoice(row: InvoiceRow): Invoice {
 }
 
 export const InvoiceRepository = {
+  async findPage(filter: { buyerId?: string | undefined }, request: PageRequest): Promise<Page<Invoice>> {
+    const where: Prisma.InvoiceWhereInput = filter.buyerId ? { buyerId: filter.buyerId } : {};
+    const [rows, total] = await Promise.all([
+      db().invoice.findMany({ where, orderBy: { issuedAt: "desc" }, ...skipTake(request) }),
+      db().invoice.count({ where }),
+    ]);
+    return toPage(rows.map(toInvoice), total, request);
+  },
+
   async findById(id: string): Promise<Invoice | undefined> {
     if (!isUuid(id)) return undefined;
     const row = await db().invoice.findUnique({ where: { id } });

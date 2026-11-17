@@ -6,6 +6,7 @@ import { UserRole } from "../models/User";
 const router = Router();
 
 router.post("/", authorize(UserRole.ADMIN), InvoiceController.generate);
+router.get("/", authorize(UserRole.BUYER, UserRole.ADMIN, UserRole.SUPERVISOR), InvoiceController.list);
 router.get(
   "/order/:orderId",
   authorize(UserRole.BUYER, UserRole.ADMIN, UserRole.SUPERVISOR),

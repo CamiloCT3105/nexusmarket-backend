@@ -12,9 +12,11 @@ router.get(
   ownerOrRoles("buyerId", UserRole.ADMIN, UserRole.SUPERVISOR),
   OrderController.getByBuyer
 );
+// Todos los roles; el servicio limita qué ve cada uno (el vendedor, solo sus líneas)
+router.get("/", OrderController.list);
 router.get(
   "/:id",
-  authorize(UserRole.BUYER, UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.LOGISTICS_OPERATOR),
+  authorize(UserRole.BUYER, UserRole.SELLER, UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.LOGISTICS_OPERATOR),
   OrderController.getById
 );
 router.post("/:id/pay", authorize(UserRole.BUYER), OrderController.pay);
