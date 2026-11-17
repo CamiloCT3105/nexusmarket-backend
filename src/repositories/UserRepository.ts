@@ -1,35 +1,62 @@
-import { User } from "../models/User";
-import { clone } from "./clone";
+import { User, UserRole, UserStatus } from "../models/User";
+import { db } from "../db/transaction";
+import { Prisma } from "../generated/prisma/client";
+import { isRecordNotFound } from "../db/prismaErrors";
 
-// Almacenamiento temporal en memoria (se pierde al reiniciar).
-// La interfaz ya es asíncrona: cambiarla por una base de datos no afecta a los servicios.
-const users: User[] = [];
+// PostgreSQL (tabla users). Solo se leen las columnas que forman parte del modelo.
+const userColumns = {
+  id: true,
+  fullName: true,
+  email: true,
+  role: true,
+  status: true,
+} satisfies Prisma.UserSelect;
+
+type UserRow = Prisma.UserGetPayload<{ select: typeof userColumns }>;
+
+// Fila de la base de datos → modelo de dominio
+function toUser(row: UserRow): User {
+  return {
+    id: row.id,
+    fullName: row.fullName,
+    email: row.email,
+    role: row.role as UserRole,
+    status: row.status as UserStatus,
+  };
+}
 
 export const UserRepository = {
   async findAll(): Promise<User[]> {
-    return clone(users);
+    const rows = await db().user.findMany({ select: userColumns, orderBy: { createdAt: "asc" } });
+    return rows.map(toUser);
   },
 
   async findById(id: string): Promise<User | undefined> {
-    const user = users.find((u) => u.id === id);
-    return user && clone(user);
+    const row = await db().user.findUnique({ where: { id }, select: userColumns });
+    return row ? toUser(row) : undefined;
   },
 
   async findByEmail(email: string): Promise<User | undefined> {
-    const user = users.find((u) => u.email === email);
-    return user && clone(user);
+    const row = await db().user.findUnique({ where: { email }, select: userColumns });
+    return row ? toUser(row) : undefined;
   },
 
   async create(user: User): Promise<User> {
-    users.push(clone(user));
-    return clone(user);
+    const row = await db().user.create({ data: user, select: userColumns });
+    return toUser(row);
   },
 
   async update(id: string, updatedFields: Partial<User>): Promise<User | undefined> {
-    const user = users.find((u) => u.id === id);
-    if (!user) return undefined;
-
-    Object.assign(user, clone(updatedFields));
-    return clone(user);
+    try {
+      const row = await db().user.update({
+        where: { id },
+        data: updatedFields as Prisma.UserUpdateInput,
+        select: userColumns,
+      });
+      return toUser(row);
+    } catch (error) {
+      if (isRecordNotFound(error)) return undefined;
+      throw error;
+    }
   },
 };

@@ -1,0 +1,42 @@
+# Bases de datos para desarrollo local.
+# Uso: docker compose up -d   (detener: docker compose down; borrar datos: docker compose down -v)
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: nexusmarket-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nexus_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-nexusmarket}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:8
+    container_name: nexusmarket-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-nexus}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-nexus_dev_password}
+    ports:
+      # 27018 en el host: el 27017 suele estar ocupado por un MongoDB instalado localmente
+      - "${MONGO_PORT:-27018}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
+  mongo-data:

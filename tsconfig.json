@@ -25,5 +25,6 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "esModuleInterop": true
-  }
+  },
+  "include": ["src"]
 }

@@ -8,7 +8,16 @@ if (!jwtSecret) {
   throw new Error("La variable de entorno JWT_SECRET es obligatoria.");
 }
 
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error(
+    "La variable de entorno DATABASE_URL es obligatoria (ver .env.example y docker-compose.yml)."
+  );
+}
+
 export const env = {
+  databaseUrl,
+  mongoUrl: process.env.MONGO_URL,
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || "development",
   jwtSecret,

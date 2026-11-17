@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { AppError } from "../errors/AppError";
+import { isUniqueViolation } from "../db/prismaErrors";
 
 // Rutas que no existen
 export function notFoundHandler(_req: Request, res: Response): void {
@@ -11,6 +12,12 @@ export function notFoundHandler(_req: Request, res: Response): void {
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
   if (err instanceof AppError) {
     res.status(err.statusCode).json({ message: err.message });
+    return;
+  }
+
+  // Carrera entre dos peticiones: la restricción UNIQUE de la base de datos frena el duplicado
+  if (isUniqueViolation(err)) {
+    res.status(409).json({ message: "El recurso ya existe." });
     return;
   }
 
