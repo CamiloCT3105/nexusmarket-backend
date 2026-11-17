@@ -77,6 +77,7 @@ Entregable
 | 12 | **Capas asíncronas y manejo central de errores** | Primer paso hacia la base de datos (PostgreSQL + MongoDB): se cambia la firma de todas las capas sin cambiar el almacenamiento todavía. |
 | 13 | **Infraestructura de bases de datos** (Docker, Prisma, esquema SQL, transacciones) y **usuarios + credenciales en PostgreSQL** | Usuarios es el módulo del que dependen todos los demás, igual que en la fase 1. |
 | 14 | **Compradores, vendedores y bodegas en PostgreSQL** | Mismo orden que las fases 2 y 3: perfiles y bodegas son la base de inventario y pedidos. |
+| 15 | **Inventario y pedidos en PostgreSQL** con checkout transaccional | Es el núcleo del negocio y la parte más sensible a la concurrencia; se apoya en perfiles y bodegas ya migrados. |
 
 ## 4. Resumen por módulo
 
@@ -119,6 +120,9 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 16 | `GET /warehouses/abc` respondía `500` | Con PostgreSQL, un id que no es UUID hace fallar la consulta (`invalid input syntax for type uuid`). En memoria simplemente no se encontraba. | Los repositorios comprueban el formato (`isUuid`) y responden "no encontrado" → `404`. |
 | 17 | Perfil de comprador sin `postalCode` respondía `500` | La columna es obligatoria en la base de datos, pero el body no se validaba; en memoria se guardaba incompleto. | Validar la dirección en `BuyerService` → `400` indicando los campos que faltan. |
 | 18 | Una bodega reasignada quedaba en la lista de dos vendedores (encontrado al diseñar la migración) | `Seller.warehouseIds` era una copia de la relación que nadie limpiaba. | Calcular la lista desde `warehouses.seller_id` (D-36). |
+| 19 | Riesgo de sobreventa y de reservas parciales en el checkout (resuelto en el diseño) | Leer el stock, comprobar en Node y luego escribir deja una ventana en la que otro pedido se lleva las mismas unidades. | `UPDATE` condicional atómico dentro de una transacción; probado con 5 checkouts simultáneos sobre stock para 3. |
+| 20 | Riesgo de interbloqueo (deadlock) entre checkouts (resuelto en el diseño) | Dos pedidos con los mismos productos en distinto orden bloquean filas en orden opuesto; PostgreSQL aborta uno con error. | Reservar siempre en orden fijo (producto + bodega); probado con 6 checkouts cruzados: ningún `500`. |
+| 21 | Cantidad `1.5` en el carrito terminaba en `500` al hacer checkout | La columna `quantity` es entera y la validación solo exigía `> 0`. | Validar enteros positivos en carrito e inventario. |
 
 ## 6. Aprendizajes sobre trabajar con IA
 

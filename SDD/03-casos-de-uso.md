@@ -239,17 +239,17 @@ flowchart LR
 - **Precondiciones:** el producto y la bodega existen.
 - **Flujo principal:**
   1. El actor envía producto, bodega y cantidad.
-  2. El sistema valida que la cantidad sea mayor a cero.
-  3. Si no existía registro de inventario para ese producto en esa bodega, lo crea en cero.
-  4. El sistema suma la cantidad y registra un movimiento `INBOUND` en la bitácora; responde `201`.
-- **Flujos alternativos:** cantidad ≤ 0 → `400`; producto o bodega inexistentes → `404`; un vendedor opera una bodega ajena → `403`.
+  2. El sistema valida que la cantidad sea un entero mayor a cero.
+  3. Si no existía registro de inventario para ese producto en esa bodega, lo crea; si existía, suma la cantidad (una sola sentencia, segura ante ingresos simultáneos).
+  4. El sistema registra un movimiento `INBOUND` en la bitácora y responde `201`.
+- **Flujos alternativos:** cantidad ≤ 0 o con decimales → `400`; producto o bodega inexistentes → `404`; un vendedor opera una bodega ajena → `403`.
 - **Endpoint:** `POST /api/inventory/inbound`
 
 ### CU-19 Marcar unidades como dañadas
 - **Actor:** Vendedor (solo sus bodegas) o Administrador
 - **Precondiciones:** existe inventario del producto en la bodega.
 - **Flujo principal:** el actor envía producto, bodega y cantidad; el sistema valida que no supere las unidades no dañadas, las suma a `damagedQuantity` y registra un movimiento `ADJUSTMENT`; responde `200`.
-- **Flujos alternativos:** cantidad mayor a las unidades sanas → `400`; bodega ajena (vendedor) → `403`.
+- **Flujos alternativos:** cantidad que no es un entero positivo → `400`; cantidad mayor a las unidades sanas → `400`; bodega ajena (vendedor) → `403`.
 - **Postcondiciones:** las unidades dañadas **no se pueden reservar ni vender**.
 - **Endpoint:** `POST /api/inventory/damaged`
 
@@ -263,7 +263,7 @@ flowchart LR
 ### CU-21 Operaciones internas de inventario (reserva, salida y reingreso)
 - **Actor:** el propio sistema
 - **Descripción:** reservar stock, confirmar la salida de lo reservado y reingresar mercancía devuelta **no son acciones de usuario final**: las ejecuta el sistema al hacer checkout (CU-25), despachar un envío (CU-32) y aprobar una devolución (CU-35).
-- **Reglas:** no se reserva más de lo disponible; no se despacha más de lo reservado; cada operación queda en la bitácora de movimientos.
+- **Reglas:** no se reserva más de lo disponible; no se despacha más de lo reservado; cada operación queda en la bitácora de movimientos. La comprobación y el cambio ocurren en **una sola sentencia SQL** (`UPDATE ... WHERE disponible >= cantidad`), así dos operaciones simultáneas no pueden usar la misma unidad.
 - **Endpoints:** `POST /api/inventory/reserve`, `/outbound` y `/return`, expuestos **solo al administrador** para poder probarlos.
 
 ---
@@ -275,11 +275,11 @@ flowchart LR
 - **Precondiciones:** el comprador tiene perfil (CU-07); el producto está `PUBLISHED`.
 - **Flujo principal:**
   1. El comprador envía producto y cantidad.
-  2. El sistema valida que la cantidad sea mayor a cero y que el producto esté publicado.
+  2. El sistema valida que la cantidad sea un entero mayor a cero y que el producto esté publicado.
   3. Si el comprador no tenía carrito, el sistema lo crea.
   4. Si el producto ya estaba en el carrito, **suma la cantidad** en la misma línea; si no, agrega una línea nueva.
   5. El sistema responde `200` con el carrito.
-- **Flujos alternativos:** cantidad ≤ 0 → `400`; producto no publicado → `400`; el carrito no pertenece al usuario autenticado → `403`.
+- **Flujos alternativos:** cantidad ≤ 0 o con decimales → `400`; producto no publicado → `400`; el carrito no pertenece al usuario autenticado → `403`.
 - **Nota:** aquí **no** se valida el stock; esa validación se hace en el checkout.
 - **Endpoint:** `POST /api/carts/:buyerId/items`
 
@@ -305,12 +305,13 @@ flowchart LR
 - **Flujo principal:**
   1. El comprador solicita el checkout, **sin enviar datos**: el comprador es quien está autenticado.
   2. **Fase de validación:** para cada línea el sistema verifica que el producto siga `PUBLISHED`, busca una bodega del vendedor con stock disponible suficiente y copia el precio actual.
-  3. **Fase de reserva:** solo si todas las líneas son válidas, el sistema reserva el stock de cada una.
-  4. El sistema crea el pedido en estado `PENDING_PAYMENT`, con el total calculado, y vacía el carrito.
+  3. **Fase de reserva (transacción):** solo si todas las líneas son válidas, el sistema reserva el stock de cada una y crea el pedido en estado `PENDING_PAYMENT`, con el total calculado, **todo en una misma transacción**. Las reservas se hacen siempre en el mismo orden (producto, bodega) para evitar interbloqueos.
+  4. Confirmada la transacción, el sistema vacía el carrito.
   5. El sistema responde `201` con el pedido.
 - **Flujos alternativos:**
   - 1a. Carrito vacío → `400`.
   - 2a. Producto no publicado o sin stock suficiente → `400`; **no se reserva nada** (por eso la validación va primero).
+  - 3a. Otro pedido simultáneo se llevó el stock entre la fase 2 y la 3 → `400`; la transacción se deshace completa (**ninguna reserva parcial**, no se crea el pedido) y el carrito se conserva.
 - **Postcondiciones:** stock reservado, pedido pendiente de pago, carrito vacío.
 - **Endpoint:** `POST /api/orders/checkout`
 
@@ -330,8 +331,8 @@ flowchart LR
 ### CU-28 Cambiar el estado de un pedido (herramienta administrativa)
 - **Actor:** Administrador
 - **Flujo principal:** el administrador envía el nuevo estado; el sistema valida que la transición sea válida y responde `200`.
-- **Reglas:** las transiciones válidas son `PENDING_PAYMENT → PAID → SHIPPED → DELIVERED`; **un pedido `DELIVERED` es inmutable**. Al pasar a `SHIPPED`, lo reservado sale físicamente del inventario.
-- **Flujos alternativos:** transición inválida o pedido entregado → `400`; no es administrador → `403`.
+- **Reglas:** las transiciones válidas son `PENDING_PAYMENT → PAID → SHIPPED → DELIVERED`; **un pedido `DELIVERED` es inmutable**. Al pasar a `SHIPPED`, lo reservado sale físicamente del inventario, en la misma transacción que el cambio de estado.
+- **Flujos alternativos:** estado inexistente, transición inválida o pedido entregado → `400`; otra petición cambió el estado al mismo tiempo → `409` (así el inventario nunca se despacha dos veces); no es administrador → `403`.
 - **Nota:** el flujo normal de despacho y entrega lo conduce el módulo de envíos (CU-32).
 - **Endpoint:** `PATCH /api/orders/:id/status`
 

@@ -6,7 +6,8 @@ import { CartService } from "./CartService";
 import { ProductService } from "./ProductService";
 import { WarehouseService } from "./WarehouseService";
 import { InventoryService } from "./InventoryService";
-import { NotFoundError, ValidationError } from "../errors/AppError";
+import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
+import { transaction } from "../db/transaction";
 
 // Define qué cambios de estado son válidos desde cada estado.
 // DELIVERED tiene lista vacía: es un estado final.
@@ -17,18 +18,26 @@ const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.DELIVERED]: [],
 };
 
+// Orden fijo para tocar filas de inventario. Si dos transacciones bloquearan las
+// mismas filas en orden distinto (A→B y B→A), PostgreSQL abortaría una por deadlock.
+function byInventoryRow(a: OrderItem, b: OrderItem): number {
+  return (a.productId + a.warehouseId).localeCompare(b.productId + b.warehouseId);
+}
+
+// Redondeo a centavos para que la suma no arrastre errores de punto flotante
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export const OrderService = {
-  // Convierte el carrito del comprador en un pedido.
-  // PENDIENTE (paso de base de datos): las fases 1 y 2 deben correr dentro de una
-  // transacción SQL con bloqueo de filas de inventario. Mientras sea en memoria,
-  // dos checkouts simultáneos podrían intercalarse entre la validación y la reserva.
+  // Convierte el carrito del comprador en un pedido
   async checkout(buyerId: string): Promise<Order> {
     const cart = await CartService.getOrCreateCart(buyerId);
     if (cart.items.length === 0) {
       throw new ValidationError("El carrito está vacío.");
     }
 
-    // Fase 1: validar TODO antes de modificar nada
+    // Fase 1: validar TODO antes de modificar nada (mensajes claros, sin tocar el stock)
     const plannedItems: OrderItem[] = [];
     for (const cartItem of cart.items) {
       const product = await ProductService.getProductById(cartItem.productId);
@@ -58,23 +67,26 @@ export const OrderService = {
       });
     }
 
-    // Fase 2: ya sabemos que todo es válido, ahora sí reservamos el stock
-    for (const item of plannedItems) {
-      await InventoryService.reserveStock(item.productId, item.warehouseId, item.quantity);
-    }
-
-    const total = plannedItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-
     const order: Order = {
       id: randomUUID(),
       buyerId,
       items: plannedItems,
-      total,
+      total: roundMoney(plannedItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0)),
       status: OrderStatus.PENDING_PAYMENT,
       createdAt: new Date(),
     };
 
-    const created = await OrderRepository.create(order);
+    // Fase 2: reservas + pedido en UNA transacción. Cada reserva es un UPDATE condicional
+    // atómico; si otro pedido se llevó el stock entre la fase 1 y la 2, esa reserva falla
+    // y se deshacen también las anteriores: nunca quedan reservas parciales.
+    const created = await transaction(async () => {
+      for (const item of [...plannedItems].sort(byInventoryRow)) {
+        await InventoryService.reserveStock(item.productId, item.warehouseId, item.quantity);
+      }
+      return OrderRepository.create(order);
+    });
+
+    // El carrito (fuera de PostgreSQL) se vacía solo cuando el pedido ya está confirmado
     await CartService.clearCart(buyerId);
     return created;
   },
@@ -96,6 +108,12 @@ export const OrderService = {
   },
 
   async changeStatus(orderId: string, newStatus: OrderStatus): Promise<Order> {
+    if (!Object.values(OrderStatus).includes(newStatus)) {
+      throw new ValidationError(
+        `Estado de pedido inválido. Valores permitidos: ${Object.values(OrderStatus).join(", ")}.`
+      );
+    }
+
     const order = await this.getOrderById(orderId);
 
     if (order.status === OrderStatus.DELIVERED) {
@@ -108,13 +126,21 @@ export const OrderService = {
       );
     }
 
-    // Al despachar, la mercancía reservada sale físicamente del inventario
-    if (newStatus === OrderStatus.SHIPPED) {
-      for (const item of order.items) {
-        await InventoryService.confirmOutbound(item.productId, item.warehouseId, item.quantity);
+    await transaction(async () => {
+      // Primero se "reclama" la transición: si otra petición ya cambió el estado,
+      // esta no hace nada (evita, por ejemplo, despachar el inventario dos veces)
+      if (!(await OrderRepository.updateStatusIf(orderId, order.status, newStatus))) {
+        throw new ConflictError("El pedido cambió de estado mientras se procesaba. Intenta de nuevo.");
       }
-    }
 
-    return (await OrderRepository.update(orderId, { status: newStatus }))!;
+      // Al despachar, la mercancía reservada sale físicamente del inventario
+      if (newStatus === OrderStatus.SHIPPED) {
+        for (const item of [...order.items].sort(byInventoryRow)) {
+          await InventoryService.confirmOutbound(item.productId, item.warehouseId, item.quantity);
+        }
+      }
+    });
+
+    return this.getOrderById(orderId);
   },
 };
