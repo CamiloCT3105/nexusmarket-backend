@@ -1,42 +1,48 @@
 import { InventoryItem, InventoryMovement } from "../models/Inventory";
+import { clone } from "./clone";
 
 const inventoryItems: InventoryItem[] = [];
 const movements: InventoryMovement[] = [];
 
+function findStored(productId: string, warehouseId: string): InventoryItem | undefined {
+  return inventoryItems.find(
+    (item) => item.productId === productId && item.warehouseId === warehouseId
+  );
+}
+
 export const InventoryRepository = {
-  findItem(productId: string, warehouseId: string): InventoryItem | undefined {
-    return inventoryItems.find(
-      (item) => item.productId === productId && item.warehouseId === warehouseId
-    );
+  async findItem(productId: string, warehouseId: string): Promise<InventoryItem | undefined> {
+    const item = findStored(productId, warehouseId);
+    return item && clone(item);
   },
 
-  findAllItems(): InventoryItem[] {
-    return [...inventoryItems];
+  async findAllItems(): Promise<InventoryItem[]> {
+    return clone(inventoryItems);
   },
 
-  createItem(item: InventoryItem): InventoryItem {
-    inventoryItems.push(item);
-    return item;
+  async createItem(item: InventoryItem): Promise<InventoryItem> {
+    inventoryItems.push(clone(item));
+    return clone(item);
   },
 
-  updateItem(
+  async updateItem(
     productId: string,
     warehouseId: string,
     updatedFields: Partial<InventoryItem>
-  ): InventoryItem | undefined {
-    const item = this.findItem(productId, warehouseId);
+  ): Promise<InventoryItem | undefined> {
+    const item = findStored(productId, warehouseId);
     if (!item) return undefined;
 
-    Object.assign(item, updatedFields);
-    return item;
+    Object.assign(item, clone(updatedFields));
+    return clone(item);
   },
 
-  addMovement(movement: InventoryMovement): InventoryMovement {
-    movements.push(movement);
-    return movement;
+  async addMovement(movement: InventoryMovement): Promise<InventoryMovement> {
+    movements.push(clone(movement));
+    return clone(movement);
   },
 
-  getMovementsByProduct(productId: string): InventoryMovement[] {
-    return movements.filter((m) => m.productId === productId);
+  async getMovementsByProduct(productId: string): Promise<InventoryMovement[]> {
+    return clone(movements.filter((m) => m.productId === productId));
   },
 };

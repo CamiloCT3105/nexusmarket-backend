@@ -74,6 +74,7 @@ Entregable
 | 9 | **Autorización por rol y propiedad** en todos los módulos; se eliminó el atajo `actingUserRole` | Cierra los atajos temporales y cumple RG-01, RG-02 y RG-03. |
 | 10 | **Reportes** | Consolida información de todos los módulos (OBJ-12). |
 | 11 | **Documentación** (`README` y `SDD/`) | Deja el proyecto entendible sin leer el código. |
+| 12 | **Capas asíncronas y manejo central de errores** | Primer paso hacia la base de datos (PostgreSQL + MongoDB): se cambia la firma de todas las capas sin cambiar el almacenamiento todavía. |
 
 ## 4. Resumen por módulo
 
@@ -107,6 +108,8 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 7 | `Types of property 'sellerId' are incompatible` con `exactOptionalPropertyTypes` | Pasar `sellerId: undefined` no es lo mismo que omitir la propiedad. | Agregarla condicionalmente: `...(sellerId ? { sellerId } : {})`. |
 | 8 | Dependencia circular entre devolución y reembolso (evitada en el diseño) | `ReturnService` y `RefundService` se habrían importado mutuamente. | `RefundService` no conoce a `ReturnService`: recibe el monto ya calculado. |
 | 9 | `req.user` no tipado (evitado en el diseño) | Ampliar `Request` con declaraciones globales no funciona bien con `ts-node-dev`. | Pasar el usuario autenticado por `res.locals`. |
+| 10 | `WarehouseService.linkToSeller` no guardaba el vendedor de la bodega (encontrado al pasar a `async`) | Mutaba el objeto devuelto por el repositorio sin llamar a `update()`; funcionaba solo porque el array en memoria devolvía la referencia. Con una base de datos el cambio se habría perdido. | Agregar `WarehouseRepository.update` y hacer que los repositorios devuelvan copias, para que este tipo de error aparezca ya. |
+| 11 | Códigos HTTP incoherentes: "producto inexistente" respondía `404` en un endpoint y `400` en otro | Cada controller elegía el código en su propio `catch`, sin saber qué tipo de error había ocurrido. | Errores tipados en los servicios y un middleware central (`errorHandler`). |
 
 ## 6. Aprendizajes sobre trabajar con IA
 
@@ -118,7 +121,7 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 
 ## 7. Próximos pasos
 
-1. **Base de datos real**, reemplazando los arrays en memoria: solo cambia la capa `repositories`.
+1. **Base de datos real**, reemplazando los arrays en memoria: solo cambia la capa `repositories` (ya asíncrona). Plan: **PostgreSQL** (Prisma) para usuarios, bodegas, inventario, pedidos, facturas, envíos, devoluciones y reembolsos; **MongoDB** (Mongoose) para el catálogo de productos, los carritos y la bitácora de movimientos.
 2. **Validación de entradas** con una librería (por ejemplo, `zod`) y validación de enums en el body.
 3. **Pruebas automatizadas** de servicios y de rutas.
 4. **Frontend en React + TypeScript**, en un repositorio separado, consumiendo esta API.

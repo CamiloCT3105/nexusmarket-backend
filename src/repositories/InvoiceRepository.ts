@@ -1,22 +1,25 @@
 import { Invoice } from "../models/Invoice";
+import { clone } from "./clone";
 
 const invoices: Invoice[] = [];
 
 export const InvoiceRepository = {
-  findById(id: string): Invoice | undefined {
-    return invoices.find((invoice) => invoice.id === id);
+  async findById(id: string): Promise<Invoice | undefined> {
+    const invoice = invoices.find((i) => i.id === id);
+    return invoice && clone(invoice);
   },
 
-  findByOrderId(orderId: string): Invoice | undefined {
-    return invoices.find((invoice) => invoice.orderId === orderId);
+  async findByOrderId(orderId: string): Promise<Invoice | undefined> {
+    const invoice = invoices.find((i) => i.orderId === orderId);
+    return invoice && clone(invoice);
   },
 
-  findAll(): Invoice[] {
-    return [...invoices];
+  async findAll(): Promise<Invoice[]> {
+    return clone(invoices);
   },
 
-  create(invoice: Invoice): Invoice {
-    invoices.push(invoice);
-    return invoice;
+  async create(invoice: Invoice): Promise<Invoice> {
+    invoices.push(clone(invoice));
+    return clone(invoice);
   },
 };

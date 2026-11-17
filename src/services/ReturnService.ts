@@ -5,6 +5,7 @@ import { ReturnRepository } from "../repositories/ReturnRepository";
 import { OrderService } from "./OrderService";
 import { InventoryService } from "./InventoryService";
 import { RefundService } from "./RefundService";
+import { NotFoundError, ValidationError } from "../errors/AppError";
 
 type RegisterReturnInput = {
   orderId: string;
@@ -15,36 +16,40 @@ type RegisterReturnInput = {
 };
 
 export const ReturnService = {
-  registerReturn(input: RegisterReturnInput): ReturnRequest {
+  async registerReturn(input: RegisterReturnInput): Promise<ReturnRequest> {
     if (input.quantity <= 0) {
-      throw new Error("La cantidad a devolver debe ser mayor a cero.");
+      throw new ValidationError("La cantidad a devolver debe ser mayor a cero.");
     }
-    if (input.reason.trim() === "") {
-      throw new Error("El motivo de la devolución es obligatorio.");
+    if (typeof input.reason !== "string" || input.reason.trim() === "") {
+      throw new ValidationError("El motivo de la devolución es obligatorio.");
     }
 
-    const order = OrderService.getOrderById(input.orderId);
+    const order = await OrderService.getOrderById(input.orderId);
 
     if (order.buyerId !== input.buyerId) {
-      throw new Error("Este pedido no pertenece al comprador indicado.");
+      throw new ValidationError("Este pedido no pertenece al comprador indicado.");
     }
     if (order.status !== OrderStatus.DELIVERED) {
-      throw new Error("Solo se pueden devolver productos de pedidos entregados.");
+      throw new ValidationError("Solo se pueden devolver productos de pedidos entregados.");
     }
 
     const orderItem = order.items.find((item) => item.productId === input.productId);
     if (!orderItem) {
-      throw new Error("El producto no hace parte de este pedido.");
+      throw new ValidationError("El producto no hace parte de este pedido.");
     }
 
     // Unidades ya devueltas (solicitadas o aprobadas) de este producto en este pedido
-    const alreadyReturned = ReturnRepository.findByOrderAndProduct(input.orderId, input.productId)
+    const previousReturns = await ReturnRepository.findByOrderAndProduct(
+      input.orderId,
+      input.productId
+    );
+    const alreadyReturned = previousReturns
       .filter((request) => request.status !== ReturnStatus.REJECTED)
       .reduce((sum, request) => sum + request.quantity, 0);
 
     const returnable = orderItem.quantity - alreadyReturned;
     if (input.quantity > returnable) {
-      throw new Error(
+      throw new ValidationError(
         `Cantidad inválida. Unidades que aún se pueden devolver de este producto: ${returnable}.`
       );
     }
@@ -62,45 +67,47 @@ export const ReturnService = {
     return ReturnRepository.create(request);
   },
 
-  getReturnById(id: string): ReturnRequest {
-    const request = ReturnRepository.findById(id);
+  async getReturnById(id: string): Promise<ReturnRequest> {
+    const request = await ReturnRepository.findById(id);
     if (!request) {
-      throw new Error("Devolución no encontrada.");
+      throw new NotFoundError("Devolución no encontrada.");
     }
     return request;
   },
 
-  getReturnsByOrder(orderId: string): ReturnRequest[] {
+  async getReturnsByOrder(orderId: string): Promise<ReturnRequest[]> {
     return ReturnRepository.findByOrderId(orderId);
   },
 
-  listReturns(): ReturnRequest[] {
+  async listReturns(): Promise<ReturnRequest[]> {
     return ReturnRepository.findAll();
   },
 
-  processReturn(returnId: string, approve: boolean): ReturnRequest {
-    const request = this.getReturnById(returnId);
+  async processReturn(returnId: string, approve: boolean): Promise<ReturnRequest> {
+    const request = await this.getReturnById(returnId);
     if (request.status !== ReturnStatus.REQUESTED) {
-      throw new Error("Esta devolución ya fue procesada.");
+      throw new ValidationError("Esta devolución ya fue procesada.");
     }
 
     if (!approve) {
-      return ReturnRepository.update(returnId, { status: ReturnStatus.REJECTED })!;
+      return (await ReturnRepository.update(returnId, { status: ReturnStatus.REJECTED }))!;
     }
 
-    const order = OrderService.getOrderById(request.orderId);
+    const order = await OrderService.getOrderById(request.orderId);
     const orderItem = order.items.find((item) => item.productId === request.productId);
     if (!orderItem) {
-      throw new Error("El producto de la devolución no existe en el pedido.");
+      throw new ValidationError("El producto de la devolución no existe en el pedido.");
     }
 
+    // PENDIENTE (paso de base de datos): estos tres pasos deben ir en una sola transacción.
+
     // 1. La mercancía vuelve al inventario de la bodega de la que salió
-    InventoryService.registerReturn(orderItem.productId, orderItem.warehouseId, request.quantity);
+    await InventoryService.registerReturn(orderItem.productId, orderItem.warehouseId, request.quantity);
 
     // 2. Se genera el reembolso, usando el precio que se pagó (no el actual del producto)
-    RefundService.generateRefund(request.id, orderItem.unitPrice * request.quantity);
+    await RefundService.generateRefund(request.id, orderItem.unitPrice * request.quantity);
 
     // 3. Se marca la devolución como aprobada
-    return ReturnRepository.update(returnId, { status: ReturnStatus.APPROVED })!;
+    return (await ReturnRepository.update(returnId, { status: ReturnStatus.APPROVED }))!;
   },
 };

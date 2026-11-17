@@ -2,60 +2,33 @@ import { Request, Response } from "express";
 import { BuyerService } from "../services/BuyerService";
 import { CommercialStatus, Address } from "../models/Buyer";
 import { getAuthUser } from "../middlewares/authenticate";
+import { requireParam } from "../utils/params";
 
 export const BuyerController = {
-  register(req: Request, res: Response): void {
-    try {
-      const authUser = getAuthUser(res);
-      const { primaryAddress } = req.body as { primaryAddress: Address };
-      const buyer = BuyerService.registerBuyer({ userId: authUser.id, primaryAddress });
-      res.status(201).json(buyer);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async register(req: Request, res: Response): Promise<void> {
+    const authUser = getAuthUser(res);
+    const { primaryAddress } = req.body as { primaryAddress: Address };
+    const buyer = await BuyerService.registerBuyer({ userId: authUser.id, primaryAddress });
+    res.status(201).json(buyer);
   },
 
-  getByUserId(req: Request, res: Response): void {
-    try {
-      const { userId } = req.params;
-      if (typeof userId !== "string") {
-        res.status(400).json({ message: "El parámetro 'userId' es requerido." });
-        return;
-      }
-      const buyer = BuyerService.getBuyerByUserId(userId);
-      res.status(200).json(buyer);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async getByUserId(req: Request, res: Response): Promise<void> {
+    const buyer = await BuyerService.getBuyerByUserId(requireParam(req, "userId"));
+    res.status(200).json(buyer);
   },
 
-  addAddress(req: Request, res: Response): void {
-    try {
-      const { userId } = req.params;
-      if (typeof userId !== "string") {
-        res.status(400).json({ message: "El parámetro 'userId' es requerido." });
-        return;
-      }
-      const address = req.body as Address;
-      const updated = BuyerService.addAddress(userId, address);
-      res.status(200).json(updated);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async addAddress(req: Request, res: Response): Promise<void> {
+    const address = req.body as Address;
+    const updated = await BuyerService.addAddress(requireParam(req, "userId"), address);
+    res.status(200).json(updated);
   },
 
-  updateCommercialStatus(req: Request, res: Response): void {
-    try {
-      const { userId } = req.params;
-      if (typeof userId !== "string") {
-        res.status(400).json({ message: "El parámetro 'userId' es requerido." });
-        return;
-      }
-      const { commercialStatus } = req.body as { commercialStatus: CommercialStatus };
-      const updated = BuyerService.updateCommercialStatus(userId, commercialStatus);
-      res.status(200).json(updated);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async updateCommercialStatus(req: Request, res: Response): Promise<void> {
+    const { commercialStatus } = req.body as { commercialStatus: CommercialStatus };
+    const updated = await BuyerService.updateCommercialStatus(
+      requireParam(req, "userId"),
+      commercialStatus
+    );
+    res.status(200).json(updated);
   },
 };

@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { UserRole } from "../models/User";
 import { getAuthUser } from "./authenticate";
+import { ForbiddenError } from "../errors/AppError";
 
 // Uso: authorize(UserRole.ADMIN, UserRole.SUPERVISOR)
 export function authorize(...allowedRoles: UserRole[]) {
@@ -8,8 +9,7 @@ export function authorize(...allowedRoles: UserRole[]) {
     const authUser = getAuthUser(res);
 
     if (!allowedRoles.includes(authUser.role)) {
-      res.status(403).json({ message: "No tienes permisos para realizar esta acción." });
-      return;
+      throw new ForbiddenError("No tienes permisos para realizar esta acción.");
     }
     next();
   };

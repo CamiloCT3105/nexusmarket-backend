@@ -2,22 +2,25 @@ import { Seller } from "../models/Seller";
 import { SellerRepository } from "../repositories/SellerRepository";
 import { UserService } from "./UserService";
 import { UserRole } from "../models/User";
+import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
 
 type OnboardSellerInput = {
   userId: string;
 };
 
 export const SellerService = {
-  onboardSeller(input: OnboardSellerInput): Seller {
-    const user = UserService.getUserById(input.userId);
+  async onboardSeller(input: OnboardSellerInput): Promise<Seller> {
+    const user = await UserService.getUserById(input.userId);
 
     if (user.role !== UserRole.SELLER) {
-      throw new Error("El usuario debe tener el rol SELLER para ser incorporado como vendedor.");
+      throw new ValidationError(
+        "El usuario debe tener el rol SELLER para ser incorporado como vendedor."
+      );
     }
 
-    const existingSeller = SellerRepository.findByUserId(input.userId);
+    const existingSeller = await SellerRepository.findByUserId(input.userId);
     if (existingSeller) {
-      throw new Error("Este usuario ya está registrado como vendedor.");
+      throw new ConflictError("Este usuario ya está registrado como vendedor.");
     }
 
     const newSeller: Seller = {
@@ -28,18 +31,18 @@ export const SellerService = {
     return SellerRepository.create(newSeller);
   },
 
-  getSellerByUserId(userId: string): Seller {
-    const seller = SellerRepository.findByUserId(userId);
+  async getSellerByUserId(userId: string): Promise<Seller> {
+    const seller = await SellerRepository.findByUserId(userId);
     if (!seller) {
-      throw new Error("Vendedor no encontrado.");
+      throw new NotFoundError("Vendedor no encontrado.");
     }
     return seller;
   },
 
-  assignWarehouse(userId: string, warehouseId: string): Seller {
-    const seller = this.getSellerByUserId(userId);
+  async assignWarehouse(userId: string, warehouseId: string): Promise<Seller> {
+    const seller = await this.getSellerByUserId(userId);
     const updatedWarehouses = [...seller.warehouseIds, warehouseId];
-    const updated = SellerRepository.update(userId, { warehouseIds: updatedWarehouses });
+    const updated = await SellerRepository.update(userId, { warehouseIds: updatedWarehouses });
     return updated!;
   },
 };

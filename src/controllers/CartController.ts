@@ -1,62 +1,35 @@
 import { Request, Response } from "express";
 import { CartService } from "../services/CartService";
+import { requireParam } from "../utils/params";
 
 export const CartController = {
-  getCart(req: Request, res: Response): void {
-    try {
-      const { buyerId } = req.params;
-      if (typeof buyerId !== "string") {
-        res.status(400).json({ message: "El parámetro 'buyerId' es requerido." });
-        return;
-      }
-      const cart = CartService.getOrCreateCart(buyerId);
-      res.status(200).json(cart);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async getCart(req: Request, res: Response): Promise<void> {
+    const cart = await CartService.getOrCreateCart(requireParam(req, "buyerId"));
+    res.status(200).json(cart);
   },
 
-  addItem(req: Request, res: Response): void {
-    try {
-      const { buyerId } = req.params;
-      if (typeof buyerId !== "string") {
-        res.status(400).json({ message: "El parámetro 'buyerId' es requerido." });
-        return;
-      }
-      const { productId, quantity } = req.body as { productId: string; quantity: number };
-      const cart = CartService.addItem(buyerId, productId, quantity);
-      res.status(200).json(cart);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async addItem(req: Request, res: Response): Promise<void> {
+    const buyerId = requireParam(req, "buyerId");
+    const { productId, quantity } = req.body as { productId: string; quantity: number };
+    const cart = await CartService.addItem(buyerId, productId, quantity);
+    res.status(200).json(cart);
   },
 
-  removeItem(req: Request, res: Response): void {
-    try {
-      const { buyerId, productId } = req.params;
-      if (typeof buyerId !== "string" || typeof productId !== "string") {
-        res.status(400).json({ message: "Los parámetros 'buyerId' y 'productId' son requeridos." });
-        return;
-      }
-      const cart = CartService.removeItem(buyerId, productId);
-      res.status(200).json(cart);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async removeItem(req: Request, res: Response): Promise<void> {
+    const cart = await CartService.removeItem(
+      requireParam(req, "buyerId"),
+      requireParam(req, "productId")
+    );
+    res.status(200).json(cart);
   },
 
-  updateQuantity(req: Request, res: Response): void {
-    try {
-      const { buyerId, productId } = req.params;
-      if (typeof buyerId !== "string" || typeof productId !== "string") {
-        res.status(400).json({ message: "Los parámetros 'buyerId' y 'productId' son requeridos." });
-        return;
-      }
-      const { quantity } = req.body as { quantity: number };
-      const cart = CartService.updateQuantity(buyerId, productId, quantity);
-      res.status(200).json(cart);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async updateQuantity(req: Request, res: Response): Promise<void> {
+    const { quantity } = req.body as { quantity: number };
+    const cart = await CartService.updateQuantity(
+      requireParam(req, "buyerId"),
+      requireParam(req, "productId"),
+      quantity
+    );
+    res.status(200).json(cart);
   },
 };

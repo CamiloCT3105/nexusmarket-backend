@@ -56,7 +56,7 @@ flowchart LR
   5. El sistema responde `201` con el usuario, sin la contraseña.
 - **Flujos alternativos:**
   - 2a. Contraseña corta → `400`.
-  - 3a. Correo ya registrado → `400`.
+  - 3a. Correo ya registrado → `409`.
   - Cualquier `role` enviado en el cuerpo se **ignora**: el registro público solo crea compradores.
 - **Postcondiciones:** existe un usuario `BUYER` activo (aún sin perfil de comprador, ver CU-07).
 - **Endpoint:** `POST /api/auth/register`
@@ -71,7 +71,7 @@ flowchart LR
   4. El sistema genera un JWT (con el id del usuario y su rol) y responde `200` con el token y el usuario.
 - **Flujos alternativos:**
   - 2a. Correo inexistente o contraseña incorrecta → `401` con el mismo mensaje en ambos casos ("Credenciales inválidas."), para no revelar qué correos existen.
-  - 3a. Cuenta bloqueada → `401` con mensaje de bloqueo.
+  - 3a. Cuenta bloqueada → `403` con mensaje de bloqueo.
 - **Postcondiciones:** el usuario posee un token válido hasta que expire (por defecto 8 horas).
 - **Endpoint:** `POST /api/auth/login`
 
@@ -90,7 +90,7 @@ flowchart LR
   2. El sistema valida que el rol pertenezca al catálogo (`BUYER`, `SELLER`, `LOGISTICS_OPERATOR`, `ADMIN`, `SUPERVISOR`).
   3. El sistema valida la contraseña y que el correo sea único.
   4. El sistema crea el usuario `ACTIVE` con su credencial y responde `201`.
-- **Flujos alternativos:** rol inválido → `400`; correo duplicado o contraseña corta → `400`; quien llama no es administrador → `403`.
+- **Flujos alternativos:** rol inválido → `400`; correo duplicado → `409`; contraseña corta → `400`; quien llama no es administrador → `403`.
 - **Postcondiciones:** existe un usuario con el rol indicado. Si es `SELLER`, aún debe incorporarse como vendedor (CU-10).
 - **Endpoint:** `POST /api/users`
 
@@ -98,7 +98,7 @@ flowchart LR
 - **Actor:** Administrador
 - **Precondiciones:** el usuario existe.
 - **Flujo principal:** el administrador envía el nuevo estado (`ACTIVE` o `BLOCKED`); el sistema lo actualiza y responde `200`.
-- **Flujos alternativos:** usuario inexistente → `400`; no es administrador → `403`.
+- **Flujos alternativos:** usuario inexistente → `404`; no es administrador → `403`.
 - **Postcondiciones:** si el estado es `BLOCKED`, el usuario no puede iniciar sesión y **sus tokens vigentes dejan de funcionar de inmediato**.
 - **Endpoint:** `PATCH /api/users/:id/status`
 
@@ -106,7 +106,7 @@ flowchart LR
 - **Actor:** Administrador
 - **Precondiciones:** el usuario existe.
 - **Flujo principal:** el administrador envía el nuevo rol; el sistema reemplaza el rol anterior (cada usuario tiene **un único rol**, RG-02) y responde `200`.
-- **Flujos alternativos:** usuario inexistente → `400`; no es administrador → `403`.
+- **Flujos alternativos:** usuario inexistente → `404`; no es administrador → `403`.
 - **Postcondiciones:** el nuevo rol aplica desde la siguiente petición del usuario, porque el rol se lee del estado actual y no del token.
 - **Endpoint:** `PATCH /api/users/:id/role`
 
@@ -124,7 +124,7 @@ flowchart LR
   2. El sistema toma el `userId` **del token** (no del cuerpo).
   3. El sistema valida que el usuario tenga rol `BUYER` y que no tenga ya un perfil.
   4. El sistema crea el perfil con estado comercial `ACTIVE` y sin direcciones adicionales; responde `201`.
-- **Flujos alternativos:** ya tiene perfil → `400`; el rol no es `BUYER` → `403`.
+- **Flujos alternativos:** ya tiene perfil → `409`; el rol no es `BUYER` → `403`.
 - **Postcondiciones:** el usuario puede usar carrito y pedidos.
 - **Endpoint:** `POST /api/buyers`
 
@@ -132,14 +132,14 @@ flowchart LR
 - **Actor:** Comprador (solo sobre su propio perfil)
 - **Precondiciones:** perfil de comprador existente.
 - **Flujo principal:** el comprador envía una dirección (calle, ciudad, país, código postal); el sistema la agrega a sus direcciones adicionales y responde `200`.
-- **Flujos alternativos:** el perfil no es del usuario autenticado → `403`; el perfil no existe → `400`.
+- **Flujos alternativos:** el perfil no es del usuario autenticado → `403`; el perfil no existe → `404`.
 - **Endpoint:** `PATCH /api/buyers/:userId/addresses`
 
 ### CU-09 Actualizar el estado comercial de un comprador
 - **Actor:** Administrador
 - **Precondiciones:** perfil de comprador existente.
 - **Flujo principal:** el administrador envía el nuevo estado comercial (`ACTIVE` o `RESTRICTED`); el sistema lo actualiza y responde `200`.
-- **Flujos alternativos:** no es administrador → `403`; perfil inexistente → `400`.
+- **Flujos alternativos:** no es administrador → `403`; perfil inexistente → `404`.
 - **Endpoint:** `PATCH /api/buyers/:userId/commercial-status`
 
 > Consultar un perfil de comprador (`GET /api/buyers/:userId`) está permitido al propio comprador, al administrador y al supervisor.
@@ -156,7 +156,7 @@ flowchart LR
   2. El sistema valida que el usuario exista y tenga rol `SELLER`.
   3. El sistema valida que no esté ya incorporado.
   4. El sistema crea el perfil de vendedor, sin bodegas, y responde `201`.
-- **Flujos alternativos:** rol distinto de `SELLER` → `400`; ya incorporado → `400`; no es administrador → `403`.
+- **Flujos alternativos:** rol distinto de `SELLER` → `400`; ya incorporado → `409`; no es administrador → `403`.
 - **Postcondiciones:** el vendedor puede crear productos y bodegas.
 - **Endpoint:** `POST /api/sellers`
 
@@ -181,14 +181,14 @@ flowchart LR
   2. Si el actor es **vendedor**, el sistema fuerza el tipo `SELLER` y toma el `sellerId` del token.
   3. El sistema valida las reglas del tipo: una bodega `SELLER` exige un vendedor existente; una `MARKETPLACE` no puede tener vendedor.
   4. El sistema crea la bodega y responde `201`.
-- **Flujos alternativos:** un vendedor intenta crear una bodega `MARKETPLACE` → `403`; bodega `SELLER` sin vendedor o con vendedor inexistente → `400`; bodega `MARKETPLACE` con vendedor → `400`.
+- **Flujos alternativos:** un vendedor intenta crear una bodega `MARKETPLACE` → `403`; bodega `SELLER` sin vendedor → `400`; con vendedor inexistente → `404`; bodega `MARKETPLACE` con vendedor → `400`.
 - **Endpoint:** `POST /api/warehouses`
 
 ### CU-13 Vincular una bodega a un vendedor
 - **Actor:** Administrador
 - **Precondiciones:** la bodega existe y es de tipo `SELLER`; el vendedor existe.
 - **Flujo principal:** el administrador envía el `sellerId`; el sistema actualiza **ambos lados** de la relación (la bodega apunta al vendedor y el vendedor lista la bodega) y responde `200`.
-- **Flujos alternativos:** bodega de tipo `MARKETPLACE` → `400`; vendedor inexistente → `400`; no es administrador → `403`.
+- **Flujos alternativos:** bodega de tipo `MARKETPLACE` → `400`; vendedor inexistente → `404`; no es administrador → `403`.
 - **Endpoint:** `PATCH /api/warehouses/:id/link-seller`
 
 > Consultar bodegas: `GET /api/warehouses/:id` (administrador, supervisor, operador logístico, y el vendedor solo si es suya) y `GET /api/warehouses/seller/:sellerId` (el propio vendedor, administrador, supervisor, operador logístico).
@@ -205,21 +205,21 @@ flowchart LR
   2. El sistema toma el `sellerId` **del token**, ignorando cualquiera que venga en el cuerpo.
   3. El sistema valida que el vendedor exista y que el precio sea mayor a cero.
   4. El sistema crea el producto en estado `PUBLISHED`, sin variantes, y responde `201`.
-- **Flujos alternativos:** sin perfil de vendedor → `400`; precio ≤ 0 → `400`; el rol no es `SELLER` → `403`.
+- **Flujos alternativos:** sin perfil de vendedor → `404`; precio ≤ 0 → `400`; el rol no es `SELLER` → `403`.
 - **Endpoint:** `POST /api/products`
 
 ### CU-15 Agregar variante a un producto
 - **Actor:** Vendedor (solo sus productos) o Administrador
 - **Precondiciones:** el producto existe.
 - **Flujo principal:** el actor envía nombre y valor de la variante (por ejemplo, "Talla" / "M"); el sistema le asigna un id y la agrega al producto; responde `200`.
-- **Flujos alternativos:** un vendedor intenta modificar un producto de otro vendedor → `403`; producto inexistente → `400`.
+- **Flujos alternativos:** un vendedor intenta modificar un producto de otro vendedor → `403`; producto inexistente → `404`.
 - **Endpoint:** `PATCH /api/products/:id/variants`
 
 ### CU-16 Cambiar el estado de un producto
 - **Actor:** Vendedor (solo sus productos) o Administrador
 - **Precondiciones:** el producto existe.
 - **Flujo principal:** el actor envía el nuevo estado (`PUBLISHED`, `SUSPENDED` o `DISCONTINUED`); el sistema lo actualiza y responde `200`.
-- **Flujos alternativos:** producto ajeno (vendedor) → `403`; producto inexistente → `400`.
+- **Flujos alternativos:** producto ajeno (vendedor) → `403`; producto inexistente → `404`.
 - **Postcondiciones:** solo los productos `PUBLISHED` pueden agregarse al carrito o comprarse.
 - **Endpoint:** `PATCH /api/products/:id/status`
 
@@ -241,7 +241,7 @@ flowchart LR
   2. El sistema valida que la cantidad sea mayor a cero.
   3. Si no existía registro de inventario para ese producto en esa bodega, lo crea en cero.
   4. El sistema suma la cantidad y registra un movimiento `INBOUND` en la bitácora; responde `201`.
-- **Flujos alternativos:** cantidad ≤ 0 → `400`; producto o bodega inexistentes → `400`; un vendedor opera una bodega ajena → `403`.
+- **Flujos alternativos:** cantidad ≤ 0 → `400`; producto o bodega inexistentes → `404`; un vendedor opera una bodega ajena → `403`.
 - **Endpoint:** `POST /api/inventory/inbound`
 
 ### CU-19 Marcar unidades como dañadas
@@ -342,7 +342,7 @@ flowchart LR
 - **Actor:** Administrador
 - **Precondiciones:** el pedido ya fue pagado (cualquier estado distinto de `PENDING_PAYMENT`).
 - **Flujo principal:** el administrador envía el id del pedido; el sistema crea la factura con el monto del pedido y responde `201`.
-- **Flujos alternativos:** pedido sin pagar → `400`; pedido que ya tiene factura → `400`; pedido inexistente → `400`; no es administrador → `403`.
+- **Flujos alternativos:** pedido sin pagar → `400`; pedido que ya tiene factura → `409`; pedido inexistente → `404`; no es administrador → `403`.
 - **Endpoint:** `POST /api/invoices`
 
 ### CU-30 Consultar factura
@@ -359,7 +359,7 @@ flowchart LR
 - **Actor:** Operador Logístico o Administrador
 - **Precondiciones:** el pedido está en estado `PAID`.
 - **Flujo principal:** el actor envía el id del pedido; el sistema crea el envío en estado `PREPARING`, genera un código de seguimiento (`NX-XXXXXXXX`) y registra el primer evento; responde `201`.
-- **Flujos alternativos:** pedido que no está `PAID` → `400`; pedido que ya tiene envío → `400`; rol sin permiso → `403`.
+- **Flujos alternativos:** pedido que no está `PAID` → `400`; pedido que ya tiene envío → `409`; rol sin permiso → `403`.
 - **Endpoint:** `POST /api/shipments`
 
 ### CU-32 Actualizar seguimiento y confirmar entrega

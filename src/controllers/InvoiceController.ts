@@ -4,60 +4,32 @@ import { Invoice } from "../models/Invoice";
 import { AuthUser } from "../models/AuthUser";
 import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
+import { ForbiddenError } from "../errors/AppError";
+import { requireParam } from "../utils/params";
 
 // Un BUYER solo puede ver sus propias facturas
-function canAccessInvoice(authUser: AuthUser, invoice: Invoice): boolean {
-  return authUser.role !== UserRole.BUYER || invoice.buyerId === authUser.id;
+function assertInvoiceAccess(authUser: AuthUser, invoice: Invoice): void {
+  if (authUser.role === UserRole.BUYER && invoice.buyerId !== authUser.id) {
+    throw new ForbiddenError("Solo puedes consultar tus propias facturas.");
+  }
 }
 
 export const InvoiceController = {
-  generate(req: Request, res: Response): void {
-    try {
-      const { orderId } = req.body as { orderId: string };
-      const invoice = InvoiceService.generateInvoice(orderId);
-      res.status(201).json(invoice);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async generate(req: Request, res: Response): Promise<void> {
+    const { orderId } = req.body as { orderId: string };
+    const invoice = await InvoiceService.generateInvoice(orderId);
+    res.status(201).json(invoice);
   },
 
-  getById(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
-
-      const invoice = InvoiceService.getInvoiceById(id);
-      if (!canAccessInvoice(getAuthUser(res), invoice)) {
-        res.status(403).json({ message: "Solo puedes consultar tus propias facturas." });
-        return;
-      }
-
-      res.status(200).json(invoice);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async getById(req: Request, res: Response): Promise<void> {
+    const invoice = await InvoiceService.getInvoiceById(requireParam(req, "id"));
+    assertInvoiceAccess(getAuthUser(res), invoice);
+    res.status(200).json(invoice);
   },
 
-  getByOrder(req: Request, res: Response): void {
-    try {
-      const { orderId } = req.params;
-      if (typeof orderId !== "string") {
-        res.status(400).json({ message: "El parámetro 'orderId' es requerido." });
-        return;
-      }
-
-      const invoice = InvoiceService.getInvoiceByOrder(orderId);
-      if (!canAccessInvoice(getAuthUser(res), invoice)) {
-        res.status(403).json({ message: "Solo puedes consultar tus propias facturas." });
-        return;
-      }
-
-      res.status(200).json(invoice);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async getByOrder(req: Request, res: Response): Promise<void> {
+    const invoice = await InvoiceService.getInvoiceByOrder(requireParam(req, "orderId"));
+    assertInvoiceAccess(getAuthUser(res), invoice);
+    res.status(200).json(invoice);
   },
 };

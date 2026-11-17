@@ -1,30 +1,32 @@
 import { Order } from "../models/Order";
+import { clone } from "./clone";
 
 const orders: Order[] = [];
 
 export const OrderRepository = {
-  findById(id: string): Order | undefined {
-    return orders.find((order) => order.id === id);
+  async findById(id: string): Promise<Order | undefined> {
+    const order = orders.find((o) => o.id === id);
+    return order && clone(order);
   },
 
-  findByBuyerId(buyerId: string): Order[] {
-    return orders.filter((order) => order.buyerId === buyerId);
+  async findByBuyerId(buyerId: string): Promise<Order[]> {
+    return clone(orders.filter((o) => o.buyerId === buyerId));
   },
 
-  findAll(): Order[] {
-    return [...orders];
+  async findAll(): Promise<Order[]> {
+    return clone(orders);
   },
 
-  create(order: Order): Order {
-    orders.push(order);
-    return order;
+  async create(order: Order): Promise<Order> {
+    orders.push(clone(order));
+    return clone(order);
   },
 
-  update(id: string, updatedFields: Partial<Order>): Order | undefined {
-    const order = this.findById(id);
+  async update(id: string, updatedFields: Partial<Order>): Promise<Order | undefined> {
+    const order = orders.find((o) => o.id === id);
     if (!order) return undefined;
 
-    Object.assign(order, updatedFields);
-    return order;
+    Object.assign(order, clone(updatedFields));
+    return clone(order);
   },
 };

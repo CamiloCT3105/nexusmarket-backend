@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { User, UserRole, UserStatus } from "../models/User";
 import { UserRepository } from "../repositories/UserRepository";
+import { ConflictError, NotFoundError } from "../errors/AppError";
 
 //Datos para crear User. Id lo genera el sistema, status se maneja por default ACTIVE
 type CreateUserInput = {
@@ -10,10 +11,10 @@ type CreateUserInput = {
 };
 
 export const UserService = {
-  createUser(input: CreateUserInput): User {
-    const existingUser = UserRepository.findByEmail(input.email);
+  async createUser(input: CreateUserInput): Promise<User> {
+    const existingUser = await UserRepository.findByEmail(input.email);
     if (existingUser) {
-      throw new Error("Ya existe un usuario registrado con este correo electrónico.");
+      throw new ConflictError("Ya existe un usuario registrado con este correo electrónico.");
     }
 
     const newUser: User = {
@@ -27,31 +28,31 @@ export const UserService = {
     return UserRepository.create(newUser);
   },
 
-  getUserById(id: string): User {
-    const user = UserRepository.findById(id);
+  async getUserById(id: string): Promise<User> {
+    const user = await UserRepository.findById(id);
     if (!user) {
-      throw new Error("Usuario no encontrado.");
+      throw new NotFoundError("Usuario no encontrado.");
     }
     return user;
   },
 
-  listUsers(): User[] {
+  async listUsers(): Promise<User[]> {
     return UserRepository.findAll();
   },
 
-  findUserByEmail(email: string): User | undefined {
+  async findUserByEmail(email: string): Promise<User | undefined> {
     return UserRepository.findByEmail(email);
   },
 
-  changeStatus(id: string, newStatus: UserStatus): User {
-    const user = this.getUserById(id); // se valida existencia reutilizando validador.
-    const updated = UserRepository.update(id, { status: newStatus });
+  async changeStatus(id: string, newStatus: UserStatus): Promise<User> {
+    await this.getUserById(id); // se valida existencia reutilizando validador.
+    const updated = await UserRepository.update(id, { status: newStatus });
     return updated!; // sabemos que existe porque getUserById ya lo validó
   },
 
-  assignRole(id: string, newRole: UserRole): User {
-    this.getUserById(id);
-    const updated = UserRepository.update(id, { role: newRole });
+  async assignRole(id: string, newRole: UserRole): Promise<User> {
+    await this.getUserById(id);
+    const updated = await UserRepository.update(id, { role: newRole });
     return updated!;
   },
 };

@@ -4,114 +4,82 @@ import { AuthUser } from "../models/AuthUser";
 import { UserRole } from "../models/User";
 import { WarehouseService } from "../services/WarehouseService";
 import { getAuthUser } from "../middlewares/authenticate";
+import { ForbiddenError } from "../errors/AppError";
+import { requireParam } from "../utils/params";
+
+type StockMovementBody = {
+  productId: string;
+  warehouseId: string;
+  quantity: number;
+};
 
 // Un SELLER solo puede operar sobre sus propias bodegas; los demás roles
 // que llegan hasta aquí ya fueron filtrados por la ruta.
-function canAccessWarehouse(authUser: AuthUser, warehouseId: string): boolean {
-  if (authUser.role !== UserRole.SELLER) return true;
-  return WarehouseService.getWarehouseById(warehouseId).sellerId === authUser.id;
+async function assertWarehouseAccess(
+  authUser: AuthUser,
+  warehouseId: string,
+  message: string
+): Promise<void> {
+  if (authUser.role !== UserRole.SELLER) return;
+  const warehouse = await WarehouseService.getWarehouseById(warehouseId);
+  if (warehouse.sellerId !== authUser.id) {
+    throw new ForbiddenError(message);
+  }
 }
 
 export const InventoryController = {
-  registerInbound(req: Request, res: Response): void {
-    try {
-      const { productId, warehouseId, quantity } = req.body as {
-        productId: string;
-        warehouseId: string;
-        quantity: number;
-      };
+  async registerInbound(req: Request, res: Response): Promise<void> {
+    const { productId, warehouseId, quantity } = req.body as StockMovementBody;
+    await assertWarehouseAccess(
+      getAuthUser(res),
+      warehouseId,
+      "Solo puedes operar sobre tus propias bodegas."
+    );
 
-      if (!canAccessWarehouse(getAuthUser(res), warehouseId)) {
-        res.status(403).json({ message: "Solo puedes operar sobre tus propias bodegas." });
-        return;
-      }
-
-      const item = InventoryService.registerInbound(productId, warehouseId, quantity);
-      res.status(201).json(item);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+    const item = await InventoryService.registerInbound(productId, warehouseId, quantity);
+    res.status(201).json(item);
   },
 
-  reserveStock(req: Request, res: Response): void {
-    try {
-      const { productId, warehouseId, quantity } = req.body as {
-        productId: string;
-        warehouseId: string;
-        quantity: number;
-      };
-      const item = InventoryService.reserveStock(productId, warehouseId, quantity);
-      res.status(200).json(item);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async reserveStock(req: Request, res: Response): Promise<void> {
+    const { productId, warehouseId, quantity } = req.body as StockMovementBody;
+    const item = await InventoryService.reserveStock(productId, warehouseId, quantity);
+    res.status(200).json(item);
   },
 
-  confirmOutbound(req: Request, res: Response): void {
-    try {
-      const { productId, warehouseId, quantity } = req.body as {
-        productId: string;
-        warehouseId: string;
-        quantity: number;
-      };
-      const item = InventoryService.confirmOutbound(productId, warehouseId, quantity);
-      res.status(200).json(item);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async confirmOutbound(req: Request, res: Response): Promise<void> {
+    const { productId, warehouseId, quantity } = req.body as StockMovementBody;
+    const item = await InventoryService.confirmOutbound(productId, warehouseId, quantity);
+    res.status(200).json(item);
   },
 
-  markAsDamaged(req: Request, res: Response): void {
-    try {
-      const { productId, warehouseId, quantity } = req.body as {
-        productId: string;
-        warehouseId: string;
-        quantity: number;
-      };
+  async markAsDamaged(req: Request, res: Response): Promise<void> {
+    const { productId, warehouseId, quantity } = req.body as StockMovementBody;
+    await assertWarehouseAccess(
+      getAuthUser(res),
+      warehouseId,
+      "Solo puedes operar sobre tus propias bodegas."
+    );
 
-      if (!canAccessWarehouse(getAuthUser(res), warehouseId)) {
-        res.status(403).json({ message: "Solo puedes operar sobre tus propias bodegas." });
-        return;
-      }
-
-      const item = InventoryService.markAsDamaged(productId, warehouseId, quantity);
-      res.status(200).json(item);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+    const item = await InventoryService.markAsDamaged(productId, warehouseId, quantity);
+    res.status(200).json(item);
   },
 
-  registerReturn(req: Request, res: Response): void {
-    try {
-      const { productId, warehouseId, quantity } = req.body as {
-        productId: string;
-        warehouseId: string;
-        quantity: number;
-      };
-      const item = InventoryService.registerReturn(productId, warehouseId, quantity);
-      res.status(200).json(item);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async registerReturn(req: Request, res: Response): Promise<void> {
+    const { productId, warehouseId, quantity } = req.body as StockMovementBody;
+    const item = await InventoryService.registerReturn(productId, warehouseId, quantity);
+    res.status(200).json(item);
   },
 
-  getAvailability(req: Request, res: Response): void {
-    try {
-      const { productId, warehouseId } = req.params;
-      if (typeof productId !== "string" || typeof warehouseId !== "string") {
-        res.status(400).json({ message: "Los parámetros 'productId' y 'warehouseId' son requeridos." });
-        return;
-      }
+  async getAvailability(req: Request, res: Response): Promise<void> {
+    const productId = requireParam(req, "productId");
+    const warehouseId = requireParam(req, "warehouseId");
+    await assertWarehouseAccess(
+      getAuthUser(res),
+      warehouseId,
+      "Solo puedes consultar tus propias bodegas."
+    );
 
-      if (!canAccessWarehouse(getAuthUser(res), warehouseId)) {
-        res.status(403).json({ message: "Solo puedes consultar tus propias bodegas." });
-        return;
-      }
-
-      const item = InventoryService.getAvailability(productId, warehouseId);
-      res.status(200).json(item);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+    const item = await InventoryService.getAvailability(productId, warehouseId);
+    res.status(200).json(item);
   },
 };

@@ -1,5 +1,6 @@
 import express from "express";
 import { authenticate } from "./middlewares/authenticate";
+import { errorHandler, notFoundHandler } from "./middlewares/errorHandler";
 import authRoutes from "./routes/authRoutes";
 import userRoutes from "./routes/userRoutes";
 import buyerRoutes from "./routes/buyerRoutes";
@@ -42,5 +43,9 @@ app.use("/api/invoices", invoiceRoutes);
 app.use("/api/shipments", shipmentRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/refunds", refundRoutes);
+
+// Siempre al final: rutas inexistentes y manejo central de errores
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export default app;

@@ -1,30 +1,32 @@
 import { Product } from "../models/Product";
+import { clone } from "./clone";
 
 const products: Product[] = [];
 
 export const ProductRepository = {
-  findAll(): Product[] {
-    return products;
+  async findAll(): Promise<Product[]> {
+    return clone(products);
   },
 
-  findById(id: string): Product | undefined {
-    return products.find((product) => product.id === id);
+  async findById(id: string): Promise<Product | undefined> {
+    const product = products.find((p) => p.id === id);
+    return product && clone(product);
   },
 
-  findBySellerId(sellerId: string): Product[] {
-    return products.filter((product) => product.sellerId === sellerId);
+  async findBySellerId(sellerId: string): Promise<Product[]> {
+    return clone(products.filter((p) => p.sellerId === sellerId));
   },
 
-  create(product: Product): Product {
-    products.push(product);
-    return product;
+  async create(product: Product): Promise<Product> {
+    products.push(clone(product));
+    return clone(product);
   },
 
-  update(id: string, updatedFields: Partial<Product>): Product | undefined {
-    const product = this.findById(id);
+  async update(id: string, updatedFields: Partial<Product>): Promise<Product | undefined> {
+    const product = products.find((p) => p.id === id);
     if (!product) return undefined;
 
-    Object.assign(product, updatedFields);
-    return product;
+    Object.assign(product, clone(updatedFields));
+    return clone(product);
   },
 };
