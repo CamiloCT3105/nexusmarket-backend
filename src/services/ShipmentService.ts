@@ -4,12 +4,19 @@ import { OrderStatus } from "../models/Order";
 import { ShipmentRepository } from "../repositories/ShipmentRepository";
 import { OrderService } from "./OrderService";
 import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
+import { transaction } from "../db/transaction";
 
 // Ciclo de vida válido del envío. DELIVERED es estado final.
 const allowedTransitions: Record<ShipmentStatus, ShipmentStatus[]> = {
   [ShipmentStatus.PREPARING]: [ShipmentStatus.IN_TRANSIT],
   [ShipmentStatus.IN_TRANSIT]: [ShipmentStatus.DELIVERED],
   [ShipmentStatus.DELIVERED]: [],
+};
+
+// Estado del pedido que acompaña a cada estado del envío
+const orderStatusFor: Partial<Record<ShipmentStatus, OrderStatus>> = {
+  [ShipmentStatus.IN_TRANSIT]: OrderStatus.SHIPPED,
+  [ShipmentStatus.DELIVERED]: OrderStatus.DELIVERED,
 };
 
 export const ShipmentService = {
@@ -38,6 +45,7 @@ export const ShipmentService = {
       events: [firstEvent],
     };
 
+    // order_id es UNIQUE: si dos solicitudes pasan el chequeo a la vez, la base frena la segunda (409)
     return ShipmentRepository.create(shipment);
   },
 
@@ -70,25 +78,26 @@ export const ShipmentService = {
       );
     }
 
-    // Primero sincronizamos el pedido: si falla (por ejemplo, por inventario),
-    // el envío no cambia y no quedan los dos módulos desincronizados.
-    if (newStatus === ShipmentStatus.IN_TRANSIT) {
-      await OrderService.changeStatus(shipment.orderId, OrderStatus.SHIPPED);
-    }
-    if (newStatus === ShipmentStatus.DELIVERED) {
-      await OrderService.changeStatus(shipment.orderId, OrderStatus.DELIVERED);
-    }
+    // Envío, historial y pedido cambian juntos: si el pedido no puede cambiar
+    // (por ejemplo, por inventario), el envío tampoco cambia.
+    await transaction(async () => {
+      if (!(await ShipmentRepository.updateStatusIf(shipmentId, shipment.status, newStatus))) {
+        throw new ConflictError("El envío cambió de estado mientras se procesaba. Intenta de nuevo.");
+      }
 
-    const event: ShipmentEvent = {
-      status: newStatus,
-      note: note ?? "",
-      createdAt: new Date(),
-    };
+      await ShipmentRepository.addEvent(shipmentId, {
+        status: newStatus,
+        note: typeof note === "string" ? note : "",
+        createdAt: new Date(),
+      });
 
-    return (await ShipmentRepository.update(shipmentId, {
-      status: newStatus,
-      events: [...shipment.events, event],
-    }))!;
+      const orderStatus = orderStatusFor[newStatus];
+      if (orderStatus) {
+        await OrderService.changeStatus(shipment.orderId, orderStatus);
+      }
+    });
+
+    return this.getShipmentById(shipmentId);
   },
 
   async confirmDelivery(shipmentId: string, note?: string): Promise<Shipment> {

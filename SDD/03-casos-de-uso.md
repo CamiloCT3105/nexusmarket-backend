@@ -344,7 +344,7 @@ flowchart LR
 - **Actor:** Administrador
 - **Precondiciones:** el pedido ya fue pagado (cualquier estado distinto de `PENDING_PAYMENT`).
 - **Flujo principal:** el administrador envía el id del pedido; el sistema crea la factura con el monto del pedido y responde `201`.
-- **Flujos alternativos:** pedido sin pagar → `400`; pedido que ya tiene factura → `409`; pedido inexistente → `404`; no es administrador → `403`.
+- **Flujos alternativos:** pedido sin pagar → `400`; pedido que ya tiene factura → `409` (también si dos solicitudes llegan a la vez: la restricción `UNIQUE` de la base frena la segunda); pedido inexistente → `404`; no es administrador → `403`.
 - **Endpoint:** `POST /api/invoices`
 
 ### CU-30 Consultar factura
@@ -361,7 +361,7 @@ flowchart LR
 - **Actor:** Operador Logístico o Administrador
 - **Precondiciones:** el pedido está en estado `PAID`.
 - **Flujo principal:** el actor envía el id del pedido; el sistema crea el envío en estado `PREPARING`, genera un código de seguimiento (`NX-XXXXXXXX`) y registra el primer evento; responde `201`.
-- **Flujos alternativos:** pedido que no está `PAID` → `400`; pedido que ya tiene envío → `409`; rol sin permiso → `403`.
+- **Flujos alternativos:** pedido que no está `PAID` → `400`; pedido que ya tiene envío → `409` (incluso con solicitudes simultáneas); rol sin permiso → `403`.
 - **Endpoint:** `POST /api/shipments`
 
 ### CU-32 Actualizar seguimiento y confirmar entrega
@@ -372,7 +372,7 @@ flowchart LR
   2. El sistema valida la transición (`PREPARING → IN_TRANSIT → DELIVERED`).
   3. El sistema **actualiza primero el pedido**: `IN_TRANSIT` pasa el pedido a `SHIPPED` (y el stock reservado sale del inventario); `DELIVERED` pasa el pedido a `DELIVERED`.
   4. El sistema cambia el estado del envío y agrega un evento al historial; responde `200`.
-- **Flujos alternativos:** transición inválida (por ejemplo, saltar de `PREPARING` a `DELIVERED`, o repetir `DELIVERED`) → `400`; si el pedido no puede cambiar de estado, **el envío tampoco cambia**.
+- **Flujos alternativos:** transición inválida (por ejemplo, saltar de `PREPARING` a `DELIVERED`, o repetir `DELIVERED`) → `400`; si el pedido no puede cambiar de estado, **el envío tampoco cambia** (envío, historial y pedido se actualizan en una sola transacción); otra petición cambió el envío al mismo tiempo → `409`.
 - **Endpoint:** `PATCH /api/shipments/:id/status`
 
 ### CU-33 Consultar seguimiento de un envío
@@ -394,7 +394,8 @@ flowchart LR
   3. El sistema valida que el pedido sea del comprador, esté entregado y contenga ese producto.
   4. El sistema calcula las unidades aún devolvibles: compradas menos las ya solicitadas o aprobadas (las rechazadas no cuentan).
   5. El sistema crea la devolución en estado `REQUESTED` y responde `201`.
-- **Flujos alternativos:** pedido de otra persona o no entregado → `400`; producto que no está en el pedido → `400`; cantidad mayor a lo devolvible → `400` indicando cuántas unidades quedan; motivo vacío → `400`.
+- **Flujos alternativos:** pedido de otra persona o no entregado → `400`; producto que no está en el pedido → `400`; cantidad mayor a lo devolvible → `400` indicando cuántas unidades quedan; cantidad que no es entero positivo o motivo vacío → `400`.
+- **Concurrencia:** el pedido se bloquea (`SELECT ... FOR UPDATE`) mientras se valida y se guarda la solicitud, así varias solicitudes simultáneas nunca superan entre todas las unidades compradas.
 - **Endpoint:** `POST /api/returns`
 
 ### CU-35 Procesar devolución (aprobar o rechazar)
@@ -405,7 +406,8 @@ flowchart LR
   1. El sistema reingresa las unidades al inventario de la bodega de la que salieron (movimiento `RETURN`).
   2. El sistema genera un reembolso en estado `PENDING`, por precio pagado × cantidad (usa el precio del pedido, no el actual del producto).
   3. El sistema pasa la devolución a `APPROVED` y responde `200`.
-- **Flujos alternativos:** devolución ya procesada → `400`; campo `approve` que no sea booleano → `400`; un vendedor procesa devoluciones de productos ajenos → `403`; un comprador intenta procesarla → `403`.
+- **Atomicidad:** el cambio de estado, el reingreso al inventario y la creación del reembolso ocurren en **una sola transacción**: o pasan los tres, o ninguno.
+- **Flujos alternativos:** devolución ya procesada → `400`; otra petición la procesó al mismo tiempo → `409` (nunca se generan dos reembolsos); campo `approve` que no sea booleano → `400`; un vendedor procesa devoluciones de productos ajenos → `403`; un comprador intenta procesarla → `403`.
 - **Endpoint:** `PATCH /api/returns/:id/process`
 
 ### CU-36 Consultar devoluciones
@@ -422,7 +424,7 @@ flowchart LR
 - **Actor:** Administrador
 - **Precondiciones:** el reembolso está `PENDING` (nace automáticamente al aprobar una devolución; no existe un endpoint para crearlo a mano).
 - **Flujo principal:** el administrador envía el estado `COMPLETED`; el sistema lo actualiza y responde `200`.
-- **Flujos alternativos:** reembolso ya completado → `400`; cualquier otro rol → `403`.
+- **Flujos alternativos:** reembolso ya completado → `400`; dos solicitudes simultáneas → la segunda recibe `409`; cualquier otro rol → `403`.
 - **Endpoint:** `PATCH /api/refunds/:id/status`
 
 ### CU-38 Consultar reembolso
@@ -450,4 +452,5 @@ flowchart LR
 | `GET /api/reports/returns` | Devoluciones por estado y montos de reembolsos pendientes y completados. |
 
 - **Flujos alternativos:** fecha inválida o `from` posterior a `to` → `400`; `threshold` no entero o negativo → `400`; cualquier otro rol → `403`.
-- **Nota:** el reporte de ventas muestra **ingresos brutos**; los reembolsos se consultan en el reporte de devoluciones.
+- **Nota:** el reporte de ventas muestra **ingresos brutos**; los reembolsos se consultan en el reporte de devoluciones. El ticket promedio se redondea a centavos (antes, a enteros).
+- **Implementación:** los conteos y sumas se calculan en PostgreSQL con consultas agregadas (`GROUP BY`, `SUM`, `COUNT`); solo los nombres de producto y los vendedores se toman del catálogo.

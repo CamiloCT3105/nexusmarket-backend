@@ -74,6 +74,16 @@ export const OrderRepository = {
     return toOrder(row);
   },
 
+  // Bloquea la fila del pedido hasta que termine la transacción activa (SELECT ... FOR UPDATE).
+  // Serializa operaciones que leen y luego escriben sobre el mismo pedido (ej: devoluciones).
+  // Solo tiene efecto dentro de transaction(); devuelve false si el pedido no existe.
+  async lockForUpdate(id: string): Promise<boolean> {
+    if (!isUuid(id)) return false;
+    const rows = await db().$queryRaw<{ id: string }[]>`
+      SELECT id FROM orders WHERE id = ${id}::uuid FOR UPDATE`;
+    return rows.length === 1;
+  },
+
   // Cambia el estado SOLO si el pedido sigue en `from` (control de concurrencia optimista).
   // Si dos peticiones intentan la misma transición a la vez, solo una gana.
   async updateStatusIf(id: string, from: OrderStatus, to: OrderStatus): Promise<boolean> {

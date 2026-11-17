@@ -78,6 +78,7 @@ Entregable
 | 13 | **Infraestructura de bases de datos** (Docker, Prisma, esquema SQL, transacciones) y **usuarios + credenciales en PostgreSQL** | Usuarios es el módulo del que dependen todos los demás, igual que en la fase 1. |
 | 14 | **Compradores, vendedores y bodegas en PostgreSQL** | Mismo orden que las fases 2 y 3: perfiles y bodegas son la base de inventario y pedidos. |
 | 15 | **Inventario y pedidos en PostgreSQL** con checkout transaccional | Es el núcleo del negocio y la parte más sensible a la concurrencia; se apoya en perfiles y bodegas ya migrados. |
+| 16 | **Facturas, envíos, devoluciones y reembolsos en PostgreSQL**; **reportes con SQL** | Cierra la parte relacional: posventa depende de pedidos, y los reportes ya pueden agregar todo en la base de datos. |
 
 ## 4. Resumen por módulo
 
@@ -123,6 +124,10 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 19 | Riesgo de sobreventa y de reservas parciales en el checkout (resuelto en el diseño) | Leer el stock, comprobar en Node y luego escribir deja una ventana en la que otro pedido se lleva las mismas unidades. | `UPDATE` condicional atómico dentro de una transacción; probado con 5 checkouts simultáneos sobre stock para 3. |
 | 20 | Riesgo de interbloqueo (deadlock) entre checkouts (resuelto en el diseño) | Dos pedidos con los mismos productos en distinto orden bloquean filas en orden opuesto; PostgreSQL aborta uno con error. | Reservar siempre en orden fijo (producto + bodega); probado con 6 checkouts cruzados: ningún `500`. |
 | 21 | Cantidad `1.5` en el carrito terminaba en `500` al hacer checkout | La columna `quantity` es entera y la validación solo exigía `> 0`. | Validar enteros positivos en carrito e inventario. |
+| 22 | Riesgo de dos reembolsos por una misma devolución (resuelto en el diseño) | Dos aprobaciones simultáneas leían `REQUESTED` y ambas reingresaban stock y generaban reembolso. | Transición condicional (`WHERE status = 'REQUESTED'`) dentro de la misma transacción que el reingreso y el reembolso. |
+| 23 | Riesgo de devolver más unidades de las compradas (resuelto en el diseño) | Varias solicitudes simultáneas sumaban "lo ya devuelto" antes de que las otras se guardaran. | Bloquear la fila del pedido (`SELECT ... FOR UPDATE`) durante la validación; probado con 3 solicitudes de 2 unidades sobre 3 compradas. |
+| 24 | Edición del SDD con un script falló: "texto no encontrado" | Los `.md` usan saltos de línea CRLF y el script buscaba `
+`. | Normalizar a LF antes de reemplazar y restaurar CRLF al guardar. |
 
 ## 6. Aprendizajes sobre trabajar con IA
 

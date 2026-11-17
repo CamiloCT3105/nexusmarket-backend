@@ -7,121 +7,95 @@ import { UserRole } from "../models/User";
 import {
   InventoryReport,
   LogisticsReport,
-  ProductSales,
-  RefundTotals,
   ReturnsReport,
   SalesReport,
   SummaryReport,
 } from "../models/Report";
-import { UserService } from "./UserService";
+import { ReportRepository, CountMap } from "../repositories/ReportRepository";
 import { ProductService } from "./ProductService";
-import { OrderService } from "./OrderService";
-import { InvoiceService } from "./InvoiceService";
-import { ShipmentService } from "./ShipmentService";
-import { ReturnService } from "./ReturnService";
-import { RefundService } from "./RefundService";
 import { InventoryService } from "./InventoryService";
 
-// Cuenta cuántos elementos hay por cada valor de un enum, incluyendo los que tienen 0
-// (así el reporte siempre trae todas las claves, aunque no haya datos).
-function countByEnum<E extends string>(allValues: E[], found: E[]): Record<E, number> {
-  const result = {} as Record<E, number>;
-  allValues.forEach((value) => {
-    result[value] = 0;
+// Los totales de PostgreSQL se calculan con consultas agregadas (ReportRepository).
+// Los productos (catálogo, fuera de PostgreSQL) se consultan por su servicio y se
+// combinan aquí para poner nombres y vendedores.
+
+// Completa con 0 los valores del enum que no aparecieron (el reporte siempre trae todas las claves)
+function withAllKeys<E extends string>(allValues: E[], counts: CountMap): Record<E, number> {
+  return Object.fromEntries(allValues.map((value) => [value, counts[value] ?? 0])) as Record<E, number>;
+}
+
+function countProductsByStatus(products: Product[]): Record<ProductStatus, number> {
+  const counts: CountMap = {};
+  products.forEach((product) => {
+    counts[product.status] = (counts[product.status] ?? 0) + 1;
   });
-  found.forEach((value) => {
-    result[value] += 1;
-  });
-  return result;
+  return withAllKeys(Object.values(ProductStatus), counts);
 }
 
 function buildProductMap(products: Product[]): Map<string, Product> {
   return new Map(products.map((product): [string, Product] => [product.id, product]));
 }
 
+const roundMoney = (value: number) => Math.round(value * 100) / 100;
+const UNKNOWN_PRODUCT = "Producto desconocido";
+
 export const ReportService = {
   async getSummary(): Promise<SummaryReport> {
     // Las consultas son independientes: se lanzan en paralelo
-    const [users, products, orders, invoices, returns] = await Promise.all([
-      UserService.listUsers(),
-      ProductService.listProducts(),
-      OrderService.listOrders(),
-      InvoiceService.listInvoices(),
-      ReturnService.listReturns(),
-    ]);
+    const [usersByRole, products, ordersByStatus, totalInvoicedAmount, returnsByStatus] =
+      await Promise.all([
+        ReportRepository.countUsersByRole(),
+        ProductService.listProducts(),
+        ReportRepository.countOrdersByStatus(),
+        ReportRepository.totalInvoiced(),
+        ReportRepository.countReturnsByStatus(),
+      ]);
 
     return {
-      usersByRole: countByEnum(
-        Object.values(UserRole),
-        users.map((user) => user.role)
-      ),
-      productsByStatus: countByEnum(
-        Object.values(ProductStatus),
-        products.map((product) => product.status)
-      ),
-      ordersByStatus: countByEnum(
-        Object.values(OrderStatus),
-        orders.map((order) => order.status)
-      ),
-      totalInvoicedAmount: invoices.reduce((sum, invoice) => sum + invoice.amount, 0),
-      pendingReturns: returns.filter((request) => request.status === ReturnStatus.REQUESTED)
-        .length,
+      usersByRole: withAllKeys(Object.values(UserRole), usersByRole),
+      productsByStatus: countProductsByStatus(products),
+      ordersByStatus: withAllKeys(Object.values(OrderStatus), ordersByStatus),
+      totalInvoicedAmount,
+      pendingReturns: returnsByStatus[ReturnStatus.REQUESTED] ?? 0,
     };
   },
 
   // Una "venta" es un pedido que ya fue pagado (cualquier estado distinto de PENDING_PAYMENT).
   // Son ingresos brutos: los reembolsos se consultan en el reporte de devoluciones.
   async getSalesReport(from?: Date, to?: Date): Promise<SalesReport> {
-    const [orders, products] = await Promise.all([
-      OrderService.listOrders(),
+    const range = { from, to };
+    const [totals, byProduct, products] = await Promise.all([
+      ReportRepository.salesTotals(range),
+      ReportRepository.salesByProduct(range),
       ProductService.listProducts(),
     ]);
-
-    const sales = orders.filter((order) => {
-      if (order.status === OrderStatus.PENDING_PAYMENT) return false;
-      if (from && order.createdAt < from) return false;
-      if (to && order.createdAt > to) return false;
-      return true;
-    });
-
     const productsById = buildProductMap(products);
-    const byProduct = new Map<string, ProductSales>();
+
+    // Ingresos por vendedor: el vendedor está en el catálogo, así que se suma aquí
     const bySeller = new Map<string, number>();
-
-    for (const order of sales) {
-      for (const item of order.items) {
-        const product = productsById.get(item.productId);
-        const revenue = item.unitPrice * item.quantity;
-
-        const current: ProductSales = byProduct.get(item.productId) ?? {
-          productId: item.productId,
-          productName: product?.name ?? "Producto desconocido",
-          unitsSold: 0,
-          revenue: 0,
-        };
-        current.unitsSold += item.quantity;
-        current.revenue += revenue;
-        byProduct.set(item.productId, current);
-
-        if (product) {
-          bySeller.set(product.sellerId, (bySeller.get(product.sellerId) ?? 0) + revenue);
-        }
+    for (const row of byProduct) {
+      const sellerId = productsById.get(row.productId)?.sellerId;
+      if (sellerId) {
+        bySeller.set(sellerId, (bySeller.get(sellerId) ?? 0) + row.revenue);
       }
     }
-
-    const totalRevenue = sales.reduce((sum, order) => sum + order.total, 0);
 
     return {
       period: {
         from: from ? from.toISOString() : null,
         to: to ? to.toISOString() : null,
       },
-      orderCount: sales.length,
-      totalRevenue,
-      averageTicket: sales.length > 0 ? Math.round(totalRevenue / sales.length) : 0,
-      topProducts: [...byProduct.values()].sort((a, b) => b.unitsSold - a.unitsSold).slice(0, 5),
+      orderCount: totals.orderCount,
+      totalRevenue: totals.totalRevenue,
+      averageTicket: totals.orderCount > 0 ? roundMoney(totals.totalRevenue / totals.orderCount) : 0,
+      topProducts: byProduct.slice(0, 5).map((row) => ({
+        productId: row.productId,
+        productName: productsById.get(row.productId)?.name ?? UNKNOWN_PRODUCT,
+        unitsSold: row.unitsSold,
+        revenue: roundMoney(row.revenue),
+      })),
       revenueBySeller: [...bySeller.entries()]
-        .map(([sellerId, revenue]) => ({ sellerId, revenue }))
+        .map(([sellerId, revenue]) => ({ sellerId, revenue: roundMoney(revenue) }))
         .sort((a, b) => b.revenue - a.revenue),
     };
   },
@@ -137,7 +111,7 @@ export const ReportService = {
       const availableQuantity = InventoryService.getAvailableQuantity(item);
       return {
         productId: item.productId,
-        productName: productsById.get(item.productId)?.name ?? "Producto desconocido",
+        productName: productsById.get(item.productId)?.name ?? UNKNOWN_PRODUCT,
         warehouseId: item.warehouseId,
         quantity: item.quantity,
         reservedQuantity: item.reservedQuantity,
@@ -158,47 +132,27 @@ export const ReportService = {
   },
 
   async getLogisticsReport(): Promise<LogisticsReport> {
-    const [shipments, orders] = await Promise.all([
-      ShipmentService.listShipments(),
-      OrderService.listOrders(),
+    const [shipmentsByStatus, ordersAwaitingShipment] = await Promise.all([
+      ReportRepository.countShipmentsByStatus(),
+      ReportRepository.ordersAwaitingShipment(),
     ]);
-    const orderIdsWithShipment = new Set(shipments.map((shipment) => shipment.orderId));
-
-    // Pedidos ya pagados a los que todavía nadie les creó el envío
-    const ordersAwaitingShipment = orders
-      .filter((order) => order.status === OrderStatus.PAID && !orderIdsWithShipment.has(order.id))
-      .map((order) => ({ orderId: order.id, total: order.total, createdAt: order.createdAt }));
 
     return {
-      shipmentsByStatus: countByEnum(
-        Object.values(ShipmentStatus),
-        shipments.map((shipment) => shipment.status)
-      ),
+      shipmentsByStatus: withAllKeys(Object.values(ShipmentStatus), shipmentsByStatus),
       ordersAwaitingShipment,
     };
   },
 
   async getReturnsReport(): Promise<ReturnsReport> {
-    const [returns, refunds] = await Promise.all([
-      ReturnService.listReturns(),
-      RefundService.listRefunds(),
+    const [returnsByStatus, refundTotals] = await Promise.all([
+      ReportRepository.countReturnsByStatus(),
+      ReportRepository.refundTotalsByStatus(),
     ]);
 
-    const totalsFor = (status: RefundStatus): RefundTotals => {
-      const matching = refunds.filter((refund) => refund.status === status);
-      return {
-        count: matching.length,
-        amount: matching.reduce((sum, refund) => sum + refund.amount, 0),
-      };
-    };
-
     return {
-      returnsByStatus: countByEnum(
-        Object.values(ReturnStatus),
-        returns.map((request) => request.status)
-      ),
-      refundsPending: totalsFor(RefundStatus.PENDING),
-      refundsCompleted: totalsFor(RefundStatus.COMPLETED),
+      returnsByStatus: withAllKeys(Object.values(ReturnStatus), returnsByStatus),
+      refundsPending: refundTotals[RefundStatus.PENDING] ?? { count: 0, amount: 0 },
+      refundsCompleted: refundTotals[RefundStatus.COMPLETED] ?? { count: 0, amount: 0 },
     };
   },
 };

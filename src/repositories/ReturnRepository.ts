@@ -1,36 +1,61 @@
-import { ReturnRequest } from "../models/ReturnRequest";
-import { clone } from "./clone";
+import { ReturnRequest, ReturnStatus } from "../models/ReturnRequest";
+import { db } from "../db/transaction";
+import { Prisma } from "../generated/prisma/client";
+import { isUuid } from "../db/ids";
 
-const returns: ReturnRequest[] = [];
+// PostgreSQL: tabla return_requests
+
+type ReturnRow = Prisma.ReturnRequestGetPayload<object>;
+
+function toReturn(row: ReturnRow): ReturnRequest {
+  return {
+    id: row.id,
+    orderId: row.orderId,
+    productId: row.productId,
+    quantity: row.quantity,
+    reason: row.reason,
+    status: row.status as ReturnStatus,
+    createdAt: row.createdAt,
+  };
+}
 
 export const ReturnRepository = {
   async findById(id: string): Promise<ReturnRequest | undefined> {
-    const request = returns.find((r) => r.id === id);
-    return request && clone(request);
+    if (!isUuid(id)) return undefined;
+    const row = await db().returnRequest.findUnique({ where: { id } });
+    return row ? toReturn(row) : undefined;
   },
 
   async findByOrderId(orderId: string): Promise<ReturnRequest[]> {
-    return clone(returns.filter((r) => r.orderId === orderId));
+    if (!isUuid(orderId)) return [];
+    const rows = await db().returnRequest.findMany({ where: { orderId }, orderBy: { createdAt: "asc" } });
+    return rows.map(toReturn);
   },
 
-  async findByOrderAndProduct(orderId: string, productId: string): Promise<ReturnRequest[]> {
-    return clone(returns.filter((r) => r.orderId === orderId && r.productId === productId));
+  // Unidades de un producto ya comprometidas en devoluciones (solicitadas o aprobadas)
+  async sumActiveQuantity(orderId: string, productId: string): Promise<number> {
+    if (!isUuid(orderId)) return 0;
+    const result = await db().returnRequest.aggregate({
+      where: { orderId, productId, status: { not: ReturnStatus.REJECTED } },
+      _sum: { quantity: true },
+    });
+    return result._sum.quantity ?? 0;
   },
 
   async findAll(): Promise<ReturnRequest[]> {
-    return clone(returns);
+    const rows = await db().returnRequest.findMany({ orderBy: { createdAt: "asc" } });
+    return rows.map(toReturn);
   },
 
   async create(request: ReturnRequest): Promise<ReturnRequest> {
-    returns.push(clone(request));
-    return clone(request);
+    const row = await db().returnRequest.create({ data: request });
+    return toReturn(row);
   },
 
-  async update(id: string, updatedFields: Partial<ReturnRequest>): Promise<ReturnRequest | undefined> {
-    const request = returns.find((r) => r.id === id);
-    if (!request) return undefined;
-
-    Object.assign(request, clone(updatedFields));
-    return clone(request);
+  // Procesa la devolución SOLO si sigue en `from`: dos aprobaciones simultáneas no generan dos reembolsos
+  async updateStatusIf(id: string, from: ReturnStatus, to: ReturnStatus): Promise<boolean> {
+    if (!isUuid(id)) return false;
+    const result = await db().returnRequest.updateMany({ where: { id, status: from }, data: { status: to } });
+    return result.count === 1;
   },
 };
