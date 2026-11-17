@@ -34,7 +34,8 @@ Proyecto académico desarrollado con **desarrollo asistido por IA (vibe coding)*
 | ts-node-dev | Recarga automática en desarrollo |
 | PostgreSQL 17 | Datos transaccionales (usuarios, inventario, pedidos, facturación, posventa) |
 | Prisma 7 | ORM y migraciones de PostgreSQL |
-| MongoDB 8 | Catálogo, carritos y bitácora de movimientos (en migración) |
+| MongoDB 8 | Catálogo de productos, carritos y bitácora de movimientos |
+| Mongoose 9 | ODM de MongoDB (esquemas e índices) |
 | Docker Compose | Levanta ambas bases de datos en desarrollo |
 
 ## Requisitos
@@ -71,7 +72,7 @@ npm run dev
 
 Verifica que funciona abriendo `http://localhost:3000/health`, que debe responder `{ "status": "ok" }`. Si PostgreSQL no está disponible, el servidor no arranca y lo indica en la consola.
 
-> **Migración en curso:** todo lo relacional (usuarios, perfiles, bodegas, inventario, pedidos, facturas, envíos, devoluciones y reembolsos) ya vive en **PostgreSQL** y sobrevive a los reinicios. Productos, carritos y la bitácora de movimientos todavía usan memoria y se pierden al reiniciar; irán a MongoDB.
+> **Persistencia:** lo transaccional (usuarios, perfiles, bodegas, inventario, pedidos, facturas, envíos, devoluciones y reembolsos) vive en **PostgreSQL**; el catálogo de productos, los carritos y la bitácora de movimientos, en **MongoDB**. Todo sobrevive a los reinicios. Si alguna de las dos bases no está disponible, el servidor no arranca.
 
 MongoDB se publica en el puerto **27018** del equipo (no en el 27017 habitual) para no chocar con un MongoDB instalado localmente.
 
@@ -86,7 +87,7 @@ MongoDB se publica en el puerto **27018** del equipo (no en el 27017 habitual) p
 | `ADMIN_EMAIL` | Recomendada | Correo del administrador que se crea al arrancar. | — |
 | `ADMIN_PASSWORD` | Recomendada | Contraseña de ese administrador (mínimo 8 caracteres). | — |
 | `DATABASE_URL` | **Sí** | Conexión a PostgreSQL. Si falta, el servidor no arranca. | ver `.env.example` |
-| `MONGO_URL` | No (por ahora) | Conexión a MongoDB. | ver `.env.example` |
+| `MONGO_URL` | **Sí** | Conexión a MongoDB. Si falta, el servidor no arranca. | ver `.env.example` |
 
 Si `ADMIN_EMAIL` y `ADMIN_PASSWORD` no están definidos, no se crea ningún administrador y no habrá forma de crear vendedores ni otros roles.
 
@@ -121,7 +122,7 @@ nexusmarket-backend/
 │   ├── middlewares/         # authenticate · authorize · ownerOrRoles · errorHandler
 │   ├── models/              # Interfaces y enums de cada entidad
 │   ├── generated/           # Cliente de Prisma generado (no se sube a git)
-│   ├── repositories/        # Acceso a datos asíncrono (PostgreSQL o, mientras se migra, memoria)
+│   ├── repositories/        # Acceso a datos asíncrono (PostgreSQL o MongoDB)
 │   ├── routes/              # Endpoints y permisos por rol
 │   ├── services/            # Lógica de negocio
 │   ├── utils/               # Hash de contraseñas, JWT y lectura de parámetros
@@ -362,7 +363,7 @@ Todo el detalle funcional y técnico está en [`SDD/`](./SDD):
 
 Este proyecto es una base funcional, no un sistema listo para producción:
 
-- **Migración a base de datos en curso**: todo lo relacional está en PostgreSQL; productos, carritos y bitácora aún no, así que tras reiniciar los pedidos pueden apuntar a productos que ya no existen; el resto de módulos sigue en memoria y se pierde al reiniciar.
+- **Sin transacciones entre PostgreSQL y MongoDB**: la bitácora de movimientos se escribe justo después de confirmar en PostgreSQL; si MongoDB fallara en ese instante, el movimiento se perdería.
 - El **pago es simulado**: solo cambia el estado del pedido.
 - La **validación de entradas es limitada**: no se verifica que los valores de enums enviados en el body sean válidos.
 - **Sin límite de intentos de login**, sin paginación y sin pruebas automatizadas.
@@ -377,7 +378,7 @@ La lista completa está en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-li
 - [x] Compradores (con direcciones), vendedores y bodegas en PostgreSQL
 - [x] Inventario y pedidos en PostgreSQL, con checkout transaccional y a prueba de sobreventa
 - [x] Facturas, envíos, devoluciones y reembolsos en PostgreSQL (transaccionales); reportes con consultas SQL agregadas
-- [ ] Catálogo, carritos y movimientos de inventario en MongoDB
+- [x] Catálogo, carritos y movimientos de inventario en MongoDB
 - [ ] Validación de entradas con una librería (por ejemplo, `zod`)
 - [ ] Pruebas automatizadas
 - [ ] Frontend en React + TypeScript (repositorio separado)

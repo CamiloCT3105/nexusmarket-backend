@@ -1,18 +1,38 @@
-import { InventoryMovement } from "../models/Inventory";
-import { clone } from "./clone";
+import { InventoryMovement, MovementType } from "../models/Inventory";
+import { InventoryMovementDocument, InventoryMovementModel } from "../db/mongoModels";
 
-// Bitácora de movimientos de inventario. Solo crece: irá a MongoDB.
-// Mientras tanto vive en memoria. Se escribe con afterCommit (ver InventoryService)
-// para que un rollback en PostgreSQL no deje movimientos que nunca ocurrieron.
-const movements: InventoryMovement[] = [];
+// MongoDB: colección inventory_movements. Bitácora que solo crece (nunca se modifica).
+// Se escribe con afterCommit (ver InventoryService): un rollback en PostgreSQL no deja
+// movimientos que nunca ocurrieron.
+
+function toMovement(doc: InventoryMovementDocument): InventoryMovement {
+  return {
+    id: doc._id,
+    productId: doc.productId,
+    warehouseId: doc.warehouseId,
+    type: doc.type as MovementType,
+    quantity: doc.quantity,
+    createdAt: doc.createdAt,
+  };
+}
 
 export const InventoryMovementRepository = {
   async add(movement: InventoryMovement): Promise<InventoryMovement> {
-    movements.push(clone(movement));
-    return clone(movement);
+    const doc = await InventoryMovementModel.create({
+      _id: movement.id,
+      productId: movement.productId,
+      warehouseId: movement.warehouseId,
+      type: movement.type,
+      quantity: movement.quantity,
+      createdAt: movement.createdAt,
+    });
+    return toMovement(doc.toObject());
   },
 
   async findByProduct(productId: string): Promise<InventoryMovement[]> {
-    return clone(movements.filter((m) => m.productId === productId));
+    const docs = await InventoryMovementModel.find({ productId })
+      .sort({ createdAt: 1 })
+      .lean<InventoryMovementDocument[]>();
+    return docs.map(toMovement);
   },
 };

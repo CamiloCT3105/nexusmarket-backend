@@ -4,7 +4,7 @@
 
 ## 1. Visión general
 
-NexusMarket Backend es una API REST construida con **Node.js, TypeScript y Express 5**, organizada por capas. Los datos se están migrando, módulo por módulo, de memoria a dos bases de datos: **PostgreSQL** para lo transaccional y **MongoDB** para lo flexible (ver sección 6.1). Solo cambia la capa de repositorios; la lógica de negocio no se toca.
+NexusMarket Backend es una API REST construida con **Node.js, TypeScript y Express 5**, organizada por capas. Los datos viven en dos bases de datos: **PostgreSQL** para lo transaccional y **MongoDB** para lo flexible (ver sección 6.1). La migración desde memoria se hizo módulo por módulo cambiando solo la capa de repositorios; la lógica de negocio no se tocó.
 
 ## 2. Arquitectura por capas
 
@@ -26,7 +26,7 @@ controllers ────── traduce HTTP → llamada al servicio; valida par�
 services ───────── lógica de negocio y reglas; coordina otros servicios;
   │                lanza errores tipados (ValidationError, NotFoundError…)
   ▼
-repositories ───── acceso a datos asíncrono (PostgreSQL vía Prisma; memoria mientras se migra)
+repositories ───── acceso a datos asíncrono (PostgreSQL vía Prisma, MongoDB vía Mongoose)
 
 errorHandler ───── middleware final: convierte cualquier error en la respuesta HTTP
 ```
@@ -177,9 +177,9 @@ stateDiagram-v2
 | **PostgreSQL** (Prisma) | `Buyer` (+ `buyer_addresses`), `Seller`, `Warehouse` | Relaciones fuertes con `users`; las bodegas de un vendedor se calculan con la llave foránea `warehouses.seller_id`. | ✅ Migrado |
 | **PostgreSQL** (Prisma) | `InventoryItem`, `Order` (+ `order_items`) | El checkout necesita **transacciones** y actualizaciones atómicas del inventario. | ✅ Migrado |
 | **PostgreSQL** (Prisma) | `Invoice`, `Shipment` (+ `shipment_events`), `ReturnRequest`, `Refund` | Dinero, máquinas de estado y relaciones fuertes con `orders`; la aprobación de devoluciones y el seguimiento de envíos son transaccionales. Los reportes se calculan con `GROUP BY`. | ✅ Migrado |
-| **MongoDB** (Mongoose) | `Product` | Catálogo flexible: variantes y atributos distintos según el tipo de producto. | Pendiente |
-| **MongoDB** (Mongoose) | `Cart` | Un documento por comprador, de escritura frecuente y vida corta (puede expirar con índice TTL). | Pendiente |
-| **MongoDB** (Mongoose) | `InventoryMovement` | Bitácora que solo crece. Ya separada en su propio repositorio y escrita con `afterCommit`. | Pendiente |
+| **MongoDB** (Mongoose) | `Product` | Catálogo flexible: variantes embebidas y atributos distintos según el tipo de producto. Precio en `Decimal128`. | ✅ Migrado |
+| **MongoDB** (Mongoose) | `Cart` | Un documento por comprador, de escritura frecuente y vida corta. Operaciones atómicas (`$inc`, `$push`, `$set`, `$pull`) y expiración automática a los 30 días sin cambios (índice TTL). | ✅ Migrado |
+| **MongoDB** (Mongoose) | `InventoryMovement` | Bitácora que solo crece; se escribe con `afterCommit`, así un rollback en PostgreSQL no deja movimientos fantasma. | ✅ Migrado |
 
 Las tablas SQL que referencian productos (`inventory_items`, `order_items`, `return_requests`) guardan `product_id` como texto **sin llave foránea**, porque el producto vive en otra base de datos. Por eso la integridad de esa referencia la valida el servicio (`ProductService.getProductById`).
 
@@ -234,7 +234,7 @@ Probado con peticiones simultáneas reales: 5 checkouts de 3 unidades sobre un s
 | D-22 | **Reportes de solo lectura** consolidados desde los servicios, sin repositorio propio (reemplazada por D-44). | Un reporte es una vista de datos de otros módulos (OBJ-12), no una entidad. | Duplicar datos en una tabla de reportes. |
 | D-23 | `reserve`, `outbound` y `return` de inventario **solo para ADMIN**. | Son operaciones internas del sistema; abiertas, un vendedor podría reservar el stock de otro. | Exponerlas a vendedores. |
 | D-24 | **Todas las capas asíncronas**, todavía con almacenamiento en memoria. | Cualquier base de datos responde con promesas; migrar primero la firma permite conectar PostgreSQL y MongoDB cambiando solo los repositorios. | Conectar la base de datos y pasar a `async` al mismo tiempo. |
-| D-25 | **Repositorios en memoria que devuelven copias** (`structuredClone`). | Simulan una base de datos real: si un servicio modifica un objeto sin llamar a `update()`, el cambio se pierde ya hoy y no al migrar. Así se encontró que `linkToSeller` no guardaba el `sellerId` de la bodega. | Devolver referencias a los objetos guardados. |
+| D-25 | **Repositorios en memoria que devuelven copias** (`structuredClone`; retirado al terminar la migración). | Simulan una base de datos real: si un servicio modifica un objeto sin llamar a `update()`, el cambio se pierde ya hoy y no al migrar. Así se encontró que `linkToSeller` no guardaba el `sellerId` de la bodega. | Devolver referencias a los objetos guardados. |
 | D-26 | **Errores tipados + middleware central** en lugar de `try/catch` con códigos fijos en cada controller. | Antes, un mismo error podía responder `400` o `404` según el controller. Ahora el código lo decide el tipo de error, en un solo lugar, y los fallos inesperados responden `500` sin filtrar detalles. | Mantener `try/catch` por controller. |
 | D-27 | **`404` para recursos inexistentes y `409` para duplicados** en todos los endpoints. | Códigos coherentes en toda la API. Antes varios endpoints respondían `400` en ambos casos. | Responder siempre `400`. |
 | D-28 | **Login de cuenta bloqueada responde `403`** (antes `401`). | Las credenciales son correctas: el problema es de permiso, igual que en `authenticate`. | Mantener `401`. |
@@ -257,12 +257,18 @@ Probado con peticiones simultáneas reales: 5 checkouts de 3 unidades sobre un s
 | D-45 | **Envío, historial y pedido en una sola transacción.** | Reemplaza el orden "primero el pedido, después el envío" de D-20 por atomicidad real: no pueden quedar desincronizados ni ante un fallo a mitad de camino. | Mantener el orden de operaciones sin transacción. |
 | D-46 | **Bloqueo pesimista del pedido al solicitar devoluciones** (`SELECT ... FOR UPDATE`). | La validación suma lo ya devuelto y luego inserta: es una lectura seguida de escritura que no cabe en un `UPDATE` condicional. El bloqueo es por pedido, así que no frena a otros compradores. | Nivel de aislamiento `SERIALIZABLE` con reintentos. |
 | D-47 | **Transiciones condicionales también en envíos, devoluciones y reembolsos.** | Mismo patrón que D-41: un solo ganador por transición; los efectos (reingreso, reembolso) no se duplican. | Confiar en el chequeo previo del servicio. |
+| D-48 | **Mongoose 9.12.1** (versión exacta) como ODM de MongoDB. | Esquemas con validación, índices declarados en código (incluido TTL) y tipos de TypeScript. Se fijó la versión anterior a la publicada el día anterior, con el mismo criterio que D-30. | Driver oficial de MongoDB sin ODM. |
+| D-49 | **Los `_id` de MongoDB son los UUID de la aplicación** (texto), no `ObjectId`. | Las columnas `product_id` de PostgreSQL apuntan a documentos de MongoDB sin tabla de traducción; los ids no cambian al migrar. | `ObjectId` + campo `id` aparte. |
+| D-50 | **Precio en `Decimal128`** y máximo dos decimales validados. | Mismo criterio que D-34 en PostgreSQL: el dinero no se guarda como punto flotante. | `Number` (double). |
+| D-51 | **Carrito con operaciones atómicas de MongoDB** en lugar de leer, modificar y reescribir el documento. | Dos "agregar al carrito" simultáneos sumaban mal (uno pisaba al otro). Probado con 10 agregados simultáneos: una línea con cantidad 10. | Reescribir la lista completa de ítems. |
+| D-52 | **Carritos que expiran a los 30 días sin cambios** (índice TTL sobre `updatedAt`). | MongoDB limpia solo los carritos abandonados, sin tareas programadas. | Guardarlos para siempre o limpiarlos con un cron. |
 
 ## 8. Limitaciones conocidas
 
 Se documentan de forma honesta para que no se confundan con funcionalidades:
 
-- **Migración a base de datos incompleta**: todo lo relacional ya está en PostgreSQL; productos, carritos y bitácora de movimientos siguen en memoria (irán a MongoDB) y se pierden al reiniciar. Mientras tanto, tras un reinicio quedan pedidos e inventario que apuntan a productos que ya no existen (los reportes los muestran como "Producto desconocido"). Se resuelve al llevar el catálogo a MongoDB.
+- **No hay transacciones entre PostgreSQL y MongoDB.** La bitácora de movimientos se escribe *después* de confirmar en PostgreSQL (`afterCommit`): si MongoDB fallara justo en ese instante, el movimiento se perdería aunque el inventario sí cambió (consistencia eventual). Para una garantía total haría falta un patrón *outbox*.
+- **La referencia `product_id` entre bases no tiene llave foránea**: la valida el servicio al crear inventario, carritos y pedidos, pero nada impide borrar un producto de MongoDB a mano y dejar referencias huérfanas (la API no permite borrar productos).
 - **El pago es simulado**: solo cambia el estado del pedido.
 - **Los productos digitales también pasan por inventario**, aunque conceptualmente no tienen stock físico.
 - **Toda unidad devuelta vuelve al stock disponible**; no se distingue si regresó defectuosa.

@@ -206,21 +206,21 @@ flowchart LR
   2. El sistema toma el `sellerId` **del token**, ignorando cualquiera que venga en el cuerpo.
   3. El sistema valida que el vendedor exista y que el precio sea mayor a cero.
   4. El sistema crea el producto en estado `PUBLISHED`, sin variantes, y responde `201`.
-- **Flujos alternativos:** sin perfil de vendedor → `404`; precio ≤ 0 → `400`; el rol no es `SELLER` → `403`.
+- **Flujos alternativos:** nombre vacío, precio ≤ 0, precio con más de dos decimales o tipo distinto de `PHYSICAL`/`DIGITAL` → `400`; sin perfil de vendedor → `404`; el rol no es `SELLER` → `403`.
 - **Endpoint:** `POST /api/products`
 
 ### CU-15 Agregar variante a un producto
 - **Actor:** Vendedor (solo sus productos) o Administrador
 - **Precondiciones:** el producto existe.
-- **Flujo principal:** el actor envía nombre y valor de la variante (por ejemplo, "Talla" / "M"); el sistema le asigna un id y la agrega al producto; responde `200`.
-- **Flujos alternativos:** un vendedor intenta modificar un producto de otro vendedor → `403`; producto inexistente → `404`.
+- **Flujo principal:** el actor envía nombre y valor de la variante (por ejemplo, "Talla" / "M"); el sistema le asigna un id y la agrega al producto (operación atómica: variantes agregadas a la vez no se pierden); responde `200`.
+- **Flujos alternativos:** falta el nombre o el valor → `400`; un vendedor intenta modificar un producto de otro vendedor → `403`; producto inexistente → `404`.
 - **Endpoint:** `PATCH /api/products/:id/variants`
 
 ### CU-16 Cambiar el estado de un producto
 - **Actor:** Vendedor (solo sus productos) o Administrador
 - **Precondiciones:** el producto existe.
 - **Flujo principal:** el actor envía el nuevo estado (`PUBLISHED`, `SUSPENDED` o `DISCONTINUED`); el sistema lo actualiza y responde `200`.
-- **Flujos alternativos:** producto ajeno (vendedor) → `403`; producto inexistente → `404`.
+- **Flujos alternativos:** estado inválido → `400`; producto ajeno (vendedor) → `403`; producto inexistente → `404`.
 - **Postcondiciones:** solo los productos `PUBLISHED` pueden agregarse al carrito o comprarse.
 - **Endpoint:** `PATCH /api/products/:id/status`
 
@@ -292,7 +292,8 @@ flowchart LR
 ### CU-24 Consultar el carrito
 - **Actor:** Comprador (solo su propio carrito)
 - **Flujo principal:** el sistema devuelve el carrito, creándolo vacío si no existía.
-- **Nota:** el carrito es privado; ni siquiera el administrador puede verlo.
+- **Nota:** el carrito es privado; ni siquiera el administrador puede verlo. Un carrito sin cambios durante **30 días** se elimina automáticamente.
+- **Concurrencia (CU-22 a CU-24):** cada cambio del carrito es una operación atómica en MongoDB, así varias peticiones simultáneas del mismo comprador no se pisan.
 - **Endpoint:** `GET /api/carts/:buyerId`
 
 ---
