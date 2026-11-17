@@ -6,68 +6,36 @@ import { Refund, RefundStatus } from "../models/Refund";
 import { AuthUser } from "../models/AuthUser";
 import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
+import { ForbiddenError } from "../errors/AppError";
+import { requireParam } from "../utils/params";
 
 // Un BUYER solo ve sus reembolsos. Para saberlo hay que seguir la cadena:
 // reembolso -> devolución -> pedido -> comprador
-function canAccessRefund(authUser: AuthUser, refund: Refund): boolean {
-  if (authUser.role !== UserRole.BUYER) return true;
-  const request = ReturnService.getReturnById(refund.returnId);
-  return OrderService.getOrderById(request.orderId).buyerId === authUser.id;
+async function assertRefundAccess(authUser: AuthUser, refund: Refund): Promise<void> {
+  if (authUser.role !== UserRole.BUYER) return;
+  const request = await ReturnService.getReturnById(refund.returnId);
+  const order = await OrderService.getOrderById(request.orderId);
+  if (order.buyerId !== authUser.id) {
+    throw new ForbiddenError("Solo puedes consultar tus propios reembolsos.");
+  }
 }
 
 export const RefundController = {
-  getById(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
-
-      const refund = RefundService.getRefundById(id);
-      if (!canAccessRefund(getAuthUser(res), refund)) {
-        res.status(403).json({ message: "Solo puedes consultar tus propios reembolsos." });
-        return;
-      }
-
-      res.status(200).json(refund);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async getById(req: Request, res: Response): Promise<void> {
+    const refund = await RefundService.getRefundById(requireParam(req, "id"));
+    await assertRefundAccess(getAuthUser(res), refund);
+    res.status(200).json(refund);
   },
 
-  getByReturn(req: Request, res: Response): void {
-    try {
-      const { returnId } = req.params;
-      if (typeof returnId !== "string") {
-        res.status(400).json({ message: "El parámetro 'returnId' es requerido." });
-        return;
-      }
-
-      const refund = RefundService.getRefundByReturn(returnId);
-      if (!canAccessRefund(getAuthUser(res), refund)) {
-        res.status(403).json({ message: "Solo puedes consultar tus propios reembolsos." });
-        return;
-      }
-
-      res.status(200).json(refund);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async getByReturn(req: Request, res: Response): Promise<void> {
+    const refund = await RefundService.getRefundByReturn(requireParam(req, "returnId"));
+    await assertRefundAccess(getAuthUser(res), refund);
+    res.status(200).json(refund);
   },
 
-  updateStatus(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
-      const { status } = req.body as { status: RefundStatus };
-      const updated = RefundService.updateStatus(id, status);
-      res.status(200).json(updated);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async updateStatus(req: Request, res: Response): Promise<void> {
+    const { status } = req.body as { status: RefundStatus };
+    const updated = await RefundService.updateStatus(requireParam(req, "id"), status);
+    res.status(200).json(updated);
   },
 };

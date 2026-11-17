@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { Refund, RefundStatus } from "../models/Refund";
 import { RefundRepository } from "../repositories/RefundRepository";
+import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
 
 const allowedTransitions: Record<RefundStatus, RefundStatus[]> = {
   [RefundStatus.PENDING]: [RefundStatus.COMPLETED],
@@ -10,14 +11,14 @@ const allowedTransitions: Record<RefundStatus, RefundStatus[]> = {
 export const RefundService = {
   // Lo llama ReturnService al aprobar una devolución. No se expone por HTTP:
   // un reembolso solo puede nacer de una devolución aprobada.
-  generateRefund(returnId: string, amount: number): Refund {
+  async generateRefund(returnId: string, amount: number): Promise<Refund> {
     if (amount <= 0) {
-      throw new Error("El monto del reembolso debe ser mayor a cero.");
+      throw new ValidationError("El monto del reembolso debe ser mayor a cero.");
     }
 
-    const existingRefund = RefundRepository.findByReturnId(returnId);
+    const existingRefund = await RefundRepository.findByReturnId(returnId);
     if (existingRefund) {
-      throw new Error("Esta devolución ya tiene un reembolso generado.");
+      throw new ConflictError("Esta devolución ya tiene un reembolso generado.");
     }
 
     const refund: Refund = {
@@ -31,35 +32,35 @@ export const RefundService = {
     return RefundRepository.create(refund);
   },
 
-  getRefundById(id: string): Refund {
-    const refund = RefundRepository.findById(id);
+  async getRefundById(id: string): Promise<Refund> {
+    const refund = await RefundRepository.findById(id);
     if (!refund) {
-      throw new Error("Reembolso no encontrado.");
+      throw new NotFoundError("Reembolso no encontrado.");
     }
     return refund;
   },
 
-  getRefundByReturn(returnId: string): Refund {
-    const refund = RefundRepository.findByReturnId(returnId);
+  async getRefundByReturn(returnId: string): Promise<Refund> {
+    const refund = await RefundRepository.findByReturnId(returnId);
     if (!refund) {
-      throw new Error("No existe un reembolso para esta devolución.");
+      throw new NotFoundError("No existe un reembolso para esta devolución.");
     }
     return refund;
   },
 
-  listRefunds(): Refund[] {
+  async listRefunds(): Promise<Refund[]> {
     return RefundRepository.findAll();
   },
 
-  updateStatus(refundId: string, newStatus: RefundStatus): Refund {
-    const refund = this.getRefundById(refundId);
+  async updateStatus(refundId: string, newStatus: RefundStatus): Promise<Refund> {
+    const refund = await this.getRefundById(refundId);
 
     if (!allowedTransitions[refund.status].includes(newStatus)) {
-      throw new Error(
+      throw new ValidationError(
         `Transición inválida: no se puede pasar de ${refund.status} a ${newStatus}.`
       );
     }
 
-    return RefundRepository.update(refundId, { status: newStatus })!;
+    return (await RefundRepository.update(refundId, { status: newStatus }))!;
   },
 };

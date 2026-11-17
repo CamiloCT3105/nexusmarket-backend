@@ -6,6 +6,7 @@ import { CartService } from "./CartService";
 import { ProductService } from "./ProductService";
 import { WarehouseService } from "./WarehouseService";
 import { InventoryService } from "./InventoryService";
+import { NotFoundError, ValidationError } from "../errors/AppError";
 
 // Define qué cambios de estado son válidos desde cada estado.
 // DELIVERED tiene lista vacía: es un estado final.
@@ -17,44 +18,50 @@ const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
 };
 
 export const OrderService = {
-  // Convierte el carrito del comprador en un pedido
-  checkout(buyerId: string): Order {
-    const cart = CartService.getOrCreateCart(buyerId);
+  // Convierte el carrito del comprador en un pedido.
+  // PENDIENTE (paso de base de datos): las fases 1 y 2 deben correr dentro de una
+  // transacción SQL con bloqueo de filas de inventario. Mientras sea en memoria,
+  // dos checkouts simultáneos podrían intercalarse entre la validación y la reserva.
+  async checkout(buyerId: string): Promise<Order> {
+    const cart = await CartService.getOrCreateCart(buyerId);
     if (cart.items.length === 0) {
-      throw new Error("El carrito está vacío.");
+      throw new ValidationError("El carrito está vacío.");
     }
 
     // Fase 1: validar TODO antes de modificar nada
-    const plannedItems: OrderItem[] = cart.items.map((cartItem) => {
-      const product = ProductService.getProductById(cartItem.productId);
+    const plannedItems: OrderItem[] = [];
+    for (const cartItem of cart.items) {
+      const product = await ProductService.getProductById(cartItem.productId);
 
       if (product.status !== ProductStatus.PUBLISHED) {
-        throw new Error(`El producto "${product.name}" ya no está disponible para la venta.`);
+        throw new ValidationError(
+          `El producto "${product.name}" ya no está disponible para la venta.`
+        );
       }
 
-      const sellerWarehouses = WarehouseService.getWarehousesBySeller(product.sellerId);
-      const warehouseId = InventoryService.findWarehouseWithStock(
+      const sellerWarehouses = await WarehouseService.getWarehousesBySeller(product.sellerId);
+      const warehouseId = await InventoryService.findWarehouseWithStock(
         product.id,
         sellerWarehouses.map((warehouse) => warehouse.id),
         cartItem.quantity
       );
 
       if (!warehouseId) {
-        throw new Error(`Stock insuficiente para el producto "${product.name}".`);
+        throw new ValidationError(`Stock insuficiente para el producto "${product.name}".`);
       }
 
-      return {
+      plannedItems.push({
         productId: product.id,
         warehouseId,
         quantity: cartItem.quantity,
         unitPrice: product.price,
-      };
-    });
+      });
+    }
 
     // Fase 2: ya sabemos que todo es válido, ahora sí reservamos el stock
-    plannedItems.forEach((item) => {
-      InventoryService.reserveStock(item.productId, item.warehouseId, item.quantity);
-    });
+    for (const item of plannedItems) {
+      await InventoryService.reserveStock(item.productId, item.warehouseId, item.quantity);
+    }
 
     const total = plannedItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
 
@@ -67,45 +74,47 @@ export const OrderService = {
       createdAt: new Date(),
     };
 
-    OrderRepository.create(order);
-    CartService.clearCart(buyerId);
-    return order;
+    const created = await OrderRepository.create(order);
+    await CartService.clearCart(buyerId);
+    return created;
   },
 
-  getOrderById(id: string): Order {
-    const order = OrderRepository.findById(id);
+  async getOrderById(id: string): Promise<Order> {
+    const order = await OrderRepository.findById(id);
     if (!order) {
-      throw new Error("Pedido no encontrado.");
+      throw new NotFoundError("Pedido no encontrado.");
     }
     return order;
   },
 
-  getOrdersByBuyer(buyerId: string): Order[] {
+  async getOrdersByBuyer(buyerId: string): Promise<Order[]> {
     return OrderRepository.findByBuyerId(buyerId);
   },
 
-  listOrders(): Order[] {
+  async listOrders(): Promise<Order[]> {
     return OrderRepository.findAll();
   },
 
-  changeStatus(orderId: string, newStatus: OrderStatus): Order {
-    const order = this.getOrderById(orderId);
+  async changeStatus(orderId: string, newStatus: OrderStatus): Promise<Order> {
+    const order = await this.getOrderById(orderId);
 
     if (order.status === OrderStatus.DELIVERED) {
-      throw new Error("Un pedido entregado es inmutable y no puede modificarse.");
+      throw new ValidationError("Un pedido entregado es inmutable y no puede modificarse.");
     }
 
     if (!allowedTransitions[order.status].includes(newStatus)) {
-      throw new Error(`Transición inválida: no se puede pasar de ${order.status} a ${newStatus}.`);
+      throw new ValidationError(
+        `Transición inválida: no se puede pasar de ${order.status} a ${newStatus}.`
+      );
     }
 
     // Al despachar, la mercancía reservada sale físicamente del inventario
     if (newStatus === OrderStatus.SHIPPED) {
-      order.items.forEach((item) => {
-        InventoryService.confirmOutbound(item.productId, item.warehouseId, item.quantity);
-      });
+      for (const item of order.items) {
+        await InventoryService.confirmOutbound(item.productId, item.warehouseId, item.quantity);
+      }
     }
 
-    return OrderRepository.update(orderId, { status: newStatus })!;
+    return (await OrderRepository.update(orderId, { status: newStatus }))!;
   },
 };

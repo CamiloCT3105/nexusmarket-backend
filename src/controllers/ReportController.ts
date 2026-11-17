@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { ReportService } from "../services/ReportService";
+import { ValidationError } from "../errors/AppError";
 
 const DEFAULT_LOW_STOCK_THRESHOLD = 10;
 
@@ -9,12 +10,14 @@ function parseDateParam(value: unknown, name: string, endOfDay: boolean): Date |
   if (value === undefined) return undefined;
 
   if (typeof value !== "string") {
-    throw new Error(`El parámetro '${name}' debe ser una fecha.`);
+    throw new ValidationError(`El parámetro '${name}' debe ser una fecha.`);
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    throw new Error(`El parámetro '${name}' no es una fecha válida (usa el formato AAAA-MM-DD).`);
+    throw new ValidationError(
+      `El parámetro '${name}' no es una fecha válida (usa el formato AAAA-MM-DD).`
+    );
   }
 
   if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -24,60 +27,38 @@ function parseDateParam(value: unknown, name: string, endOfDay: boolean): Date |
 }
 
 export const ReportController = {
-  summary(_req: Request, res: Response): void {
-    try {
-      res.status(200).json(ReportService.getSummary());
-    } catch (error) {
-      res.status(500).json({ message: (error as Error).message });
-    }
+  async summary(_req: Request, res: Response): Promise<void> {
+    res.status(200).json(await ReportService.getSummary());
   },
 
-  sales(req: Request, res: Response): void {
-    try {
-      const from = parseDateParam(req.query.from, "from", false);
-      const to = parseDateParam(req.query.to, "to", true);
+  async sales(req: Request, res: Response): Promise<void> {
+    const from = parseDateParam(req.query.from, "from", false);
+    const to = parseDateParam(req.query.to, "to", true);
 
-      if (from && to && from > to) {
-        res.status(400).json({ message: "La fecha 'from' no puede ser posterior a 'to'." });
-        return;
-      }
-
-      res.status(200).json(ReportService.getSalesReport(from, to));
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
+    if (from && to && from > to) {
+      throw new ValidationError("La fecha 'from' no puede ser posterior a 'to'.");
     }
+
+    res.status(200).json(await ReportService.getSalesReport(from, to));
   },
 
-  inventory(req: Request, res: Response): void {
-    try {
-      const rawThreshold = req.query.threshold;
-      const threshold =
-        rawThreshold === undefined ? DEFAULT_LOW_STOCK_THRESHOLD : Number(rawThreshold);
+  async inventory(req: Request, res: Response): Promise<void> {
+    const rawThreshold = req.query.threshold;
+    const threshold =
+      rawThreshold === undefined ? DEFAULT_LOW_STOCK_THRESHOLD : Number(rawThreshold);
 
-      if (!Number.isInteger(threshold) || threshold < 0) {
-        res.status(400).json({ message: "El parámetro 'threshold' debe ser un entero mayor o igual a 0." });
-        return;
-      }
-
-      res.status(200).json(ReportService.getInventoryReport(threshold));
-    } catch (error) {
-      res.status(500).json({ message: (error as Error).message });
+    if (!Number.isInteger(threshold) || threshold < 0) {
+      throw new ValidationError("El parámetro 'threshold' debe ser un entero mayor o igual a 0.");
     }
+
+    res.status(200).json(await ReportService.getInventoryReport(threshold));
   },
 
-  logistics(_req: Request, res: Response): void {
-    try {
-      res.status(200).json(ReportService.getLogisticsReport());
-    } catch (error) {
-      res.status(500).json({ message: (error as Error).message });
-    }
+  async logistics(_req: Request, res: Response): Promise<void> {
+    res.status(200).json(await ReportService.getLogisticsReport());
   },
 
-  returns(_req: Request, res: Response): void {
-    try {
-      res.status(200).json(ReportService.getReturnsReport());
-    } catch (error) {
-      res.status(500).json({ message: (error as Error).message });
-    }
+  async returns(_req: Request, res: Response): Promise<void> {
+    res.status(200).json(await ReportService.getReturnsReport());
   },
 };

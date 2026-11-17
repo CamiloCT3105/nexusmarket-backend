@@ -1,32 +1,35 @@
 import { User } from "../models/User";
+import { clone } from "./clone";
 
-// Simulamos una "tabla" de usuarios con un array en memoria.
-// Esto se pierde al reiniciar el servidor - es temporal, solo para desarrollo.
+// Almacenamiento temporal en memoria (se pierde al reiniciar).
+// La interfaz ya es asíncrona: cambiarla por una base de datos no afecta a los servicios.
 const users: User[] = [];
 
 export const UserRepository = {
-  findAll(): User[] {
-    return users;
+  async findAll(): Promise<User[]> {
+    return clone(users);
   },
 
-  findById(id: string): User | undefined {
-    return users.find((user) => user.id === id);
+  async findById(id: string): Promise<User | undefined> {
+    const user = users.find((u) => u.id === id);
+    return user && clone(user);
   },
 
-  findByEmail(email: string): User | undefined {
-    return users.find((user) => user.email === email);
+  async findByEmail(email: string): Promise<User | undefined> {
+    const user = users.find((u) => u.email === email);
+    return user && clone(user);
   },
 
-  create(user: User): User {
-    users.push(user);
-    return user;
+  async create(user: User): Promise<User> {
+    users.push(clone(user));
+    return clone(user);
   },
 
-  update(id: string, updatedFields: Partial<User>): User | undefined {
-    const user = this.findById(id);
+  async update(id: string, updatedFields: Partial<User>): Promise<User | undefined> {
+    const user = users.find((u) => u.id === id);
     if (!user) return undefined;
 
-    Object.assign(user, updatedFields);
-    return user;
+    Object.assign(user, clone(updatedFields));
+    return clone(user);
   },
 };

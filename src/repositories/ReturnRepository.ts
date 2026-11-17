@@ -1,36 +1,36 @@
 import { ReturnRequest } from "../models/ReturnRequest";
+import { clone } from "./clone";
 
 const returns: ReturnRequest[] = [];
 
 export const ReturnRepository = {
-  findById(id: string): ReturnRequest | undefined {
-    return returns.find((request) => request.id === id);
+  async findById(id: string): Promise<ReturnRequest | undefined> {
+    const request = returns.find((r) => r.id === id);
+    return request && clone(request);
   },
 
-  findByOrderId(orderId: string): ReturnRequest[] {
-    return returns.filter((request) => request.orderId === orderId);
+  async findByOrderId(orderId: string): Promise<ReturnRequest[]> {
+    return clone(returns.filter((r) => r.orderId === orderId));
   },
 
-  findByOrderAndProduct(orderId: string, productId: string): ReturnRequest[] {
-    return returns.filter(
-      (request) => request.orderId === orderId && request.productId === productId
-    );
+  async findByOrderAndProduct(orderId: string, productId: string): Promise<ReturnRequest[]> {
+    return clone(returns.filter((r) => r.orderId === orderId && r.productId === productId));
   },
 
-  findAll(): ReturnRequest[] {
-    return [...returns];
+  async findAll(): Promise<ReturnRequest[]> {
+    return clone(returns);
   },
 
-  create(request: ReturnRequest): ReturnRequest {
-    returns.push(request);
-    return request;
+  async create(request: ReturnRequest): Promise<ReturnRequest> {
+    returns.push(clone(request));
+    return clone(request);
   },
 
-  update(id: string, updatedFields: Partial<ReturnRequest>): ReturnRequest | undefined {
-    const request = this.findById(id);
+  async update(id: string, updatedFields: Partial<ReturnRequest>): Promise<ReturnRequest | undefined> {
+    const request = returns.find((r) => r.id === id);
     if (!request) return undefined;
 
-    Object.assign(request, updatedFields);
-    return request;
+    Object.assign(request, clone(updatedFields));
+    return clone(request);
   },
 };

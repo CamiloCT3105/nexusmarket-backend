@@ -1,26 +1,28 @@
 import { Buyer } from "../models/Buyer";
+import { clone } from "./clone";
 
 const buyers: Buyer[] = [];
 
 export const BuyerRepository = {
-  findAll(): Buyer[] {
-    return buyers;
+  async findAll(): Promise<Buyer[]> {
+    return clone(buyers);
   },
 
-  findByUserId(userId: string): Buyer | undefined {
-    return buyers.find((buyer) => buyer.userId === userId);
+  async findByUserId(userId: string): Promise<Buyer | undefined> {
+    const buyer = buyers.find((b) => b.userId === userId);
+    return buyer && clone(buyer);
   },
 
-  create(buyer: Buyer): Buyer {
-    buyers.push(buyer);
-    return buyer;
+  async create(buyer: Buyer): Promise<Buyer> {
+    buyers.push(clone(buyer));
+    return clone(buyer);
   },
 
-  update(userId: string, updatedFields: Partial<Buyer>): Buyer | undefined {
-    const buyer = this.findByUserId(userId);
+  async update(userId: string, updatedFields: Partial<Buyer>): Promise<Buyer | undefined> {
+    const buyer = buyers.find((b) => b.userId === userId);
     if (!buyer) return undefined;
 
-    Object.assign(buyer, updatedFields);
-    return buyer;
+    Object.assign(buyer, clone(updatedFields));
+    return clone(buyer);
   },
 };

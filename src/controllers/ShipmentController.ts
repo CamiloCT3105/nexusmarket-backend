@@ -5,76 +5,40 @@ import { Shipment, ShipmentStatus } from "../models/Shipment";
 import { AuthUser } from "../models/AuthUser";
 import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
+import { ForbiddenError } from "../errors/AppError";
+import { requireParam } from "../utils/params";
 
 // Un BUYER solo puede ver el envío de sus propios pedidos
-function canViewShipment(authUser: AuthUser, shipment: Shipment): boolean {
-  if (authUser.role !== UserRole.BUYER) return true;
-  return OrderService.getOrderById(shipment.orderId).buyerId === authUser.id;
+async function assertShipmentAccess(authUser: AuthUser, shipment: Shipment): Promise<void> {
+  if (authUser.role !== UserRole.BUYER) return;
+  const order = await OrderService.getOrderById(shipment.orderId);
+  if (order.buyerId !== authUser.id) {
+    throw new ForbiddenError("Solo puedes consultar los envíos de tus propios pedidos.");
+  }
 }
 
 export const ShipmentController = {
-  create(req: Request, res: Response): void {
-    try {
-      const { orderId } = req.body as { orderId: string };
-      const shipment = ShipmentService.createShipment(orderId);
-      res.status(201).json(shipment);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async create(req: Request, res: Response): Promise<void> {
+    const { orderId } = req.body as { orderId: string };
+    const shipment = await ShipmentService.createShipment(orderId);
+    res.status(201).json(shipment);
   },
 
-  getById(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
-
-      const shipment = ShipmentService.getShipmentById(id);
-      if (!canViewShipment(getAuthUser(res), shipment)) {
-        res.status(403).json({ message: "Solo puedes consultar los envíos de tus propios pedidos." });
-        return;
-      }
-
-      res.status(200).json(shipment);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async getById(req: Request, res: Response): Promise<void> {
+    const shipment = await ShipmentService.getShipmentById(requireParam(req, "id"));
+    await assertShipmentAccess(getAuthUser(res), shipment);
+    res.status(200).json(shipment);
   },
 
-  getByOrder(req: Request, res: Response): void {
-    try {
-      const { orderId } = req.params;
-      if (typeof orderId !== "string") {
-        res.status(400).json({ message: "El parámetro 'orderId' es requerido." });
-        return;
-      }
-
-      const shipment = ShipmentService.getShipmentByOrder(orderId);
-      if (!canViewShipment(getAuthUser(res), shipment)) {
-        res.status(403).json({ message: "Solo puedes consultar los envíos de tus propios pedidos." });
-        return;
-      }
-
-      res.status(200).json(shipment);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async getByOrder(req: Request, res: Response): Promise<void> {
+    const shipment = await ShipmentService.getShipmentByOrder(requireParam(req, "orderId"));
+    await assertShipmentAccess(getAuthUser(res), shipment);
+    res.status(200).json(shipment);
   },
 
-  updateStatus(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
-      const { status, note } = req.body as { status: ShipmentStatus; note?: string };
-      const updated = ShipmentService.updateStatus(id, status, note);
-      res.status(200).json(updated);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async updateStatus(req: Request, res: Response): Promise<void> {
+    const { status, note } = req.body as { status: ShipmentStatus; note?: string };
+    const updated = await ShipmentService.updateStatus(requireParam(req, "id"), status, note);
+    res.status(200).json(updated);
   },
 };

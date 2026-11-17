@@ -1,22 +1,32 @@
 import { Warehouse } from "../models/Warehouse";
+import { clone } from "./clone";
 
 const warehouses: Warehouse[] = [];
 
 export const WarehouseRepository = {
-  findAll(): Warehouse[] {
-    return warehouses;
+  async findAll(): Promise<Warehouse[]> {
+    return clone(warehouses);
   },
 
-  findById(id: string): Warehouse | undefined {
-    return warehouses.find((warehouse) => warehouse.id === id);
+  async findById(id: string): Promise<Warehouse | undefined> {
+    const warehouse = warehouses.find((w) => w.id === id);
+    return warehouse && clone(warehouse);
   },
 
-  findBySellerId(sellerId: string): Warehouse[] {
-    return warehouses.filter((warehouse) => warehouse.sellerId === sellerId);
+  async findBySellerId(sellerId: string): Promise<Warehouse[]> {
+    return clone(warehouses.filter((w) => w.sellerId === sellerId));
   },
 
-  create(warehouse: Warehouse): Warehouse {
-    warehouses.push(warehouse);
-    return warehouse;
+  async create(warehouse: Warehouse): Promise<Warehouse> {
+    warehouses.push(clone(warehouse));
+    return clone(warehouse);
+  },
+
+  async update(id: string, updatedFields: Partial<Warehouse>): Promise<Warehouse | undefined> {
+    const warehouse = warehouses.find((w) => w.id === id);
+    if (!warehouse) return undefined;
+
+    Object.assign(warehouse, clone(updatedFields));
+    return clone(warehouse);
   },
 };

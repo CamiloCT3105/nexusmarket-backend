@@ -3,18 +3,19 @@ import { Invoice } from "../models/Invoice";
 import { OrderStatus } from "../models/Order";
 import { InvoiceRepository } from "../repositories/InvoiceRepository";
 import { OrderService } from "./OrderService";
+import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
 
 export const InvoiceService = {
-  generateInvoice(orderId: string): Invoice {
-    const order = OrderService.getOrderById(orderId); // valida que el pedido exista
+  async generateInvoice(orderId: string): Promise<Invoice> {
+    const order = await OrderService.getOrderById(orderId); // valida que el pedido exista
 
     if (order.status === OrderStatus.PENDING_PAYMENT) {
-      throw new Error("Solo se puede facturar un pedido que ya fue pagado.");
+      throw new ValidationError("Solo se puede facturar un pedido que ya fue pagado.");
     }
 
-    const existingInvoice = InvoiceRepository.findByOrderId(orderId);
+    const existingInvoice = await InvoiceRepository.findByOrderId(orderId);
     if (existingInvoice) {
-      throw new Error("Este pedido ya tiene una factura generada.");
+      throw new ConflictError("Este pedido ya tiene una factura generada.");
     }
 
     const invoice: Invoice = {
@@ -28,23 +29,23 @@ export const InvoiceService = {
     return InvoiceRepository.create(invoice);
   },
 
-  getInvoiceById(id: string): Invoice {
-    const invoice = InvoiceRepository.findById(id);
+  async getInvoiceById(id: string): Promise<Invoice> {
+    const invoice = await InvoiceRepository.findById(id);
     if (!invoice) {
-      throw new Error("Factura no encontrada.");
+      throw new NotFoundError("Factura no encontrada.");
     }
     return invoice;
   },
 
-  getInvoiceByOrder(orderId: string): Invoice {
-    const invoice = InvoiceRepository.findByOrderId(orderId);
+  async getInvoiceByOrder(orderId: string): Promise<Invoice> {
+    const invoice = await InvoiceRepository.findByOrderId(orderId);
     if (!invoice) {
-      throw new Error("No existe una factura para este pedido.");
+      throw new NotFoundError("No existe una factura para este pedido.");
     }
     return invoice;
   },
 
-  listInvoices(): Invoice[] {
+  async listInvoices(): Promise<Invoice[]> {
     return InvoiceRepository.findAll();
   },
 };

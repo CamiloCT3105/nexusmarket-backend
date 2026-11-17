@@ -1,27 +1,29 @@
 import { Cart } from "../models/Cart";
+import { clone } from "./clone";
 
 const carts: Cart[] = [];
 
 export const CartRepository = {
-  findByBuyerId(buyerId: string): Cart | undefined {
-    return carts.find((cart) => cart.buyerId === buyerId);
+  async findByBuyerId(buyerId: string): Promise<Cart | undefined> {
+    const cart = carts.find((c) => c.buyerId === buyerId);
+    return cart && clone(cart);
   },
 
-  create(cart: Cart): Cart {
-    carts.push(cart);
-    return cart;
+  async create(cart: Cart): Promise<Cart> {
+    carts.push(clone(cart));
+    return clone(cart);
   },
 
-  update(buyerId: string, updatedFields: Partial<Cart>): Cart | undefined {
-    const cart = this.findByBuyerId(buyerId);
+  async update(buyerId: string, updatedFields: Partial<Cart>): Promise<Cart | undefined> {
+    const cart = carts.find((c) => c.buyerId === buyerId);
     if (!cart) return undefined;
 
-    Object.assign(cart, updatedFields);
-    return cart;
+    Object.assign(cart, clone(updatedFields));
+    return clone(cart);
   },
 
-  clear(buyerId: string): void {
-    const cart = this.findByBuyerId(buyerId);
+  async clear(buyerId: string): Promise<void> {
+    const cart = carts.find((c) => c.buyerId === buyerId);
     if (cart) {
       cart.items = [];
     }

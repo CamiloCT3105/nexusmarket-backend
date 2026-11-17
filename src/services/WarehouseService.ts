@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { Warehouse, WarehouseType } from "../models/Warehouse";
 import { WarehouseRepository } from "../repositories/WarehouseRepository";
 import { SellerService } from "./SellerService";
+import { NotFoundError, ValidationError } from "../errors/AppError";
 
 type CreateWarehouseInput = {
   type: WarehouseType;
@@ -10,17 +11,19 @@ type CreateWarehouseInput = {
 };
 
 export const WarehouseService = {
-  createWarehouse(input: CreateWarehouseInput): Warehouse {
+  async createWarehouse(input: CreateWarehouseInput): Promise<Warehouse> {
     if (input.type === WarehouseType.SELLER) {
       if (!input.sellerId) {
-        throw new Error("Una bodega de tipo SELLER debe tener un vendedor asociado.");
+        throw new ValidationError("Una bodega de tipo SELLER debe tener un vendedor asociado.");
       }
       // Validamos que el vendedor exista realmente
-      SellerService.getSellerByUserId(input.sellerId);
+      await SellerService.getSellerByUserId(input.sellerId);
     }
 
     if (input.type === WarehouseType.MARKETPLACE && input.sellerId) {
-      throw new Error("Una bodega de tipo MARKETPLACE no debe tener un vendedor asociado.");
+      throw new ValidationError(
+        "Una bodega de tipo MARKETPLACE no debe tener un vendedor asociado."
+      );
     }
 
     const newWarehouse: Warehouse = {
@@ -33,28 +36,29 @@ export const WarehouseService = {
     return WarehouseRepository.create(newWarehouse);
   },
 
-  getWarehouseById(id: string): Warehouse {
-    const warehouse = WarehouseRepository.findById(id);
+  async getWarehouseById(id: string): Promise<Warehouse> {
+    const warehouse = await WarehouseRepository.findById(id);
     if (!warehouse) {
-      throw new Error("Bodega no encontrada.");
+      throw new NotFoundError("Bodega no encontrada.");
     }
     return warehouse;
   },
 
-  getWarehousesBySeller(sellerId: string): Warehouse[] {
+  async getWarehousesBySeller(sellerId: string): Promise<Warehouse[]> {
     return WarehouseRepository.findBySellerId(sellerId);
   },
 
   // Vincula una bodega existente a un vendedor (actualiza ambos lados de la relación)
-  linkToSeller(warehouseId: string, sellerId: string): Warehouse {
-    const warehouse = this.getWarehouseById(warehouseId);
+  async linkToSeller(warehouseId: string, sellerId: string): Promise<Warehouse> {
+    const warehouse = await this.getWarehouseById(warehouseId);
 
     if (warehouse.type !== WarehouseType.SELLER) {
-      throw new Error("Solo se pueden vincular bodegas de tipo SELLER a un vendedor.");
+      throw new ValidationError("Solo se pueden vincular bodegas de tipo SELLER a un vendedor.");
     }
 
-    SellerService.assignWarehouse(sellerId, warehouseId);
-    warehouse.sellerId = sellerId;
-    return warehouse;
+    await SellerService.assignWarehouse(sellerId, warehouseId);
+    // Antes se mutaba el objeto en memoria sin guardarlo; ahora se persiste explícitamente
+    const updated = await WarehouseRepository.update(warehouseId, { sellerId });
+    return updated!;
   },
 };

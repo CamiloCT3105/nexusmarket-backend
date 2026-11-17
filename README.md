@@ -93,12 +93,13 @@ nexusmarket-backend/
 ├── src/
 │   ├── config/              # Variables de entorno
 │   ├── controllers/         # Adaptan HTTP a los servicios; verifican propiedad del recurso
-│   ├── middlewares/         # authenticate · authorize · ownerOrRoles
+│   ├── errors/              # Errores tipados (cada uno con su código HTTP)
+│   ├── middlewares/         # authenticate · authorize · ownerOrRoles · errorHandler
 │   ├── models/              # Interfaces y enums de cada entidad
-│   ├── repositories/        # Acceso a datos (hoy, en memoria)
+│   ├── repositories/        # Acceso a datos asíncrono (hoy, en memoria)
 │   ├── routes/              # Endpoints y permisos por rol
 │   ├── services/            # Lógica de negocio
-│   ├── utils/               # Hash de contraseñas y JWT
+│   ├── utils/               # Hash de contraseñas, JWT y lectura de parámetros
 │   ├── app.ts               # Configuración de Express
 │   └── index.ts             # Punto de entrada
 ├── .env.example
@@ -312,9 +313,11 @@ Solo lectura. Acceso: Supervisor y Admin.
 | `400` | Datos inválidos o regla de negocio incumplida |
 | `401` | Sin token, token inválido o vencido, o credenciales incorrectas |
 | `403` | Autenticado, pero sin permiso (rol o propiedad) |
-| `404` | Recurso no encontrado |
+| `404` | Recurso o ruta no encontrados |
+| `409` | Conflicto: el recurso ya existe (correo registrado, perfil, factura o envío duplicados) |
+| `500` | Error inesperado del servidor (el detalle solo se registra en la consola) |
 
-Los errores devuelven un cuerpo `{ "message": "..." }`.
+Los errores devuelven un cuerpo `{ "message": "..." }`. Todos pasan por un único middleware central (`src/middlewares/errorHandler.ts`).
 
 ## Documentación
 

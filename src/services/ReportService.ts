@@ -40,41 +40,51 @@ function buildProductMap(products: Product[]): Map<string, Product> {
 }
 
 export const ReportService = {
-  getSummary(): SummaryReport {
+  async getSummary(): Promise<SummaryReport> {
+    // Las consultas son independientes: se lanzan en paralelo
+    const [users, products, orders, invoices, returns] = await Promise.all([
+      UserService.listUsers(),
+      ProductService.listProducts(),
+      OrderService.listOrders(),
+      InvoiceService.listInvoices(),
+      ReturnService.listReturns(),
+    ]);
+
     return {
       usersByRole: countByEnum(
         Object.values(UserRole),
-        UserService.listUsers().map((user) => user.role)
+        users.map((user) => user.role)
       ),
       productsByStatus: countByEnum(
         Object.values(ProductStatus),
-        ProductService.listProducts().map((product) => product.status)
+        products.map((product) => product.status)
       ),
       ordersByStatus: countByEnum(
         Object.values(OrderStatus),
-        OrderService.listOrders().map((order) => order.status)
+        orders.map((order) => order.status)
       ),
-      totalInvoicedAmount: InvoiceService.listInvoices().reduce(
-        (sum, invoice) => sum + invoice.amount,
-        0
-      ),
-      pendingReturns: ReturnService.listReturns().filter(
-        (request) => request.status === ReturnStatus.REQUESTED
-      ).length,
+      totalInvoicedAmount: invoices.reduce((sum, invoice) => sum + invoice.amount, 0),
+      pendingReturns: returns.filter((request) => request.status === ReturnStatus.REQUESTED)
+        .length,
     };
   },
 
   // Una "venta" es un pedido que ya fue pagado (cualquier estado distinto de PENDING_PAYMENT).
   // Son ingresos brutos: los reembolsos se consultan en el reporte de devoluciones.
-  getSalesReport(from?: Date, to?: Date): SalesReport {
-    const sales = OrderService.listOrders().filter((order) => {
+  async getSalesReport(from?: Date, to?: Date): Promise<SalesReport> {
+    const [orders, products] = await Promise.all([
+      OrderService.listOrders(),
+      ProductService.listProducts(),
+    ]);
+
+    const sales = orders.filter((order) => {
       if (order.status === OrderStatus.PENDING_PAYMENT) return false;
       if (from && order.createdAt < from) return false;
       if (to && order.createdAt > to) return false;
       return true;
     });
 
-    const productsById = buildProductMap(ProductService.listProducts());
+    const productsById = buildProductMap(products);
     const byProduct = new Map<string, ProductSales>();
     const bySeller = new Map<string, number>();
 
@@ -116,10 +126,14 @@ export const ReportService = {
     };
   },
 
-  getInventoryReport(threshold: number): InventoryReport {
-    const productsById = buildProductMap(ProductService.listProducts());
+  async getInventoryReport(threshold: number): Promise<InventoryReport> {
+    const [products, inventoryItems] = await Promise.all([
+      ProductService.listProducts(),
+      InventoryService.listItems(),
+    ]);
+    const productsById = buildProductMap(products);
 
-    const items = InventoryService.listItems().map((item) => {
+    const items = inventoryItems.map((item) => {
       const availableQuantity = InventoryService.getAvailableQuantity(item);
       return {
         productId: item.productId,
@@ -143,12 +157,15 @@ export const ReportService = {
     };
   },
 
-  getLogisticsReport(): LogisticsReport {
-    const shipments = ShipmentService.listShipments();
+  async getLogisticsReport(): Promise<LogisticsReport> {
+    const [shipments, orders] = await Promise.all([
+      ShipmentService.listShipments(),
+      OrderService.listOrders(),
+    ]);
     const orderIdsWithShipment = new Set(shipments.map((shipment) => shipment.orderId));
 
     // Pedidos ya pagados a los que todavía nadie les creó el envío
-    const ordersAwaitingShipment = OrderService.listOrders()
+    const ordersAwaitingShipment = orders
       .filter((order) => order.status === OrderStatus.PAID && !orderIdsWithShipment.has(order.id))
       .map((order) => ({ orderId: order.id, total: order.total, createdAt: order.createdAt }));
 
@@ -161,9 +178,11 @@ export const ReportService = {
     };
   },
 
-  getReturnsReport(): ReturnsReport {
-    const returns = ReturnService.listReturns();
-    const refunds = RefundService.listRefunds();
+  async getReturnsReport(): Promise<ReturnsReport> {
+    const [returns, refunds] = await Promise.all([
+      ReturnService.listReturns(),
+      RefundService.listRefunds(),
+    ]);
 
     const totalsFor = (status: RefundStatus): RefundTotals => {
       const matching = refunds.filter((refund) => refund.status === status);

@@ -3,6 +3,7 @@ import { Shipment, ShipmentEvent, ShipmentStatus } from "../models/Shipment";
 import { OrderStatus } from "../models/Order";
 import { ShipmentRepository } from "../repositories/ShipmentRepository";
 import { OrderService } from "./OrderService";
+import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
 
 // Ciclo de vida válido del envío. DELIVERED es estado final.
 const allowedTransitions: Record<ShipmentStatus, ShipmentStatus[]> = {
@@ -12,15 +13,15 @@ const allowedTransitions: Record<ShipmentStatus, ShipmentStatus[]> = {
 };
 
 export const ShipmentService = {
-  createShipment(orderId: string): Shipment {
-    const order = OrderService.getOrderById(orderId);
+  async createShipment(orderId: string): Promise<Shipment> {
+    const order = await OrderService.getOrderById(orderId);
     if (order.status !== OrderStatus.PAID) {
-      throw new Error("Solo se puede crear un envío para un pedido en estado PAID.");
+      throw new ValidationError("Solo se puede crear un envío para un pedido en estado PAID.");
     }
 
-    const existingShipment = ShipmentRepository.findByOrderId(orderId);
+    const existingShipment = await ShipmentRepository.findByOrderId(orderId);
     if (existingShipment) {
-      throw new Error("Este pedido ya tiene un envío creado.");
+      throw new ConflictError("Este pedido ya tiene un envío creado.");
     }
 
     const firstEvent: ShipmentEvent = {
@@ -40,31 +41,31 @@ export const ShipmentService = {
     return ShipmentRepository.create(shipment);
   },
 
-  getShipmentById(id: string): Shipment {
-    const shipment = ShipmentRepository.findById(id);
+  async getShipmentById(id: string): Promise<Shipment> {
+    const shipment = await ShipmentRepository.findById(id);
     if (!shipment) {
-      throw new Error("Envío no encontrado.");
+      throw new NotFoundError("Envío no encontrado.");
     }
     return shipment;
   },
 
-  getShipmentByOrder(orderId: string): Shipment {
-    const shipment = ShipmentRepository.findByOrderId(orderId);
+  async getShipmentByOrder(orderId: string): Promise<Shipment> {
+    const shipment = await ShipmentRepository.findByOrderId(orderId);
     if (!shipment) {
-      throw new Error("No existe un envío para este pedido.");
+      throw new NotFoundError("No existe un envío para este pedido.");
     }
     return shipment;
   },
 
-  listShipments(): Shipment[] {
+  async listShipments(): Promise<Shipment[]> {
     return ShipmentRepository.findAll();
   },
 
-  updateStatus(shipmentId: string, newStatus: ShipmentStatus, note?: string): Shipment {
-    const shipment = this.getShipmentById(shipmentId);
+  async updateStatus(shipmentId: string, newStatus: ShipmentStatus, note?: string): Promise<Shipment> {
+    const shipment = await this.getShipmentById(shipmentId);
 
     if (!allowedTransitions[shipment.status].includes(newStatus)) {
-      throw new Error(
+      throw new ValidationError(
         `Transición inválida: no se puede pasar de ${shipment.status} a ${newStatus}.`
       );
     }
@@ -72,10 +73,10 @@ export const ShipmentService = {
     // Primero sincronizamos el pedido: si falla (por ejemplo, por inventario),
     // el envío no cambia y no quedan los dos módulos desincronizados.
     if (newStatus === ShipmentStatus.IN_TRANSIT) {
-      OrderService.changeStatus(shipment.orderId, OrderStatus.SHIPPED);
+      await OrderService.changeStatus(shipment.orderId, OrderStatus.SHIPPED);
     }
     if (newStatus === ShipmentStatus.DELIVERED) {
-      OrderService.changeStatus(shipment.orderId, OrderStatus.DELIVERED);
+      await OrderService.changeStatus(shipment.orderId, OrderStatus.DELIVERED);
     }
 
     const event: ShipmentEvent = {
@@ -84,13 +85,13 @@ export const ShipmentService = {
       createdAt: new Date(),
     };
 
-    return ShipmentRepository.update(shipmentId, {
+    return (await ShipmentRepository.update(shipmentId, {
       status: newStatus,
       events: [...shipment.events, event],
-    })!;
+    }))!;
   },
 
-  confirmDelivery(shipmentId: string, note?: string): Shipment {
+  async confirmDelivery(shipmentId: string, note?: string): Promise<Shipment> {
     return this.updateStatus(shipmentId, ShipmentStatus.DELIVERED, note);
   },
 };

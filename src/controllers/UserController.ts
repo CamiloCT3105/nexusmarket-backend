@@ -2,70 +2,40 @@ import { Request, Response } from "express";
 import { UserService } from "../services/UserService";
 import { UserRole, UserStatus } from "../models/User";
 import { AuthService } from "../services/AuthService";
+import { ValidationError } from "../errors/AppError";
+import { requireParam } from "../utils/params";
 
 export const UserController = {
-  create(req: Request, res: Response): void {
-    try {
-      const { fullName, email, password, role } = req.body as {
-        fullName: string;
-        email: string;
-        password: string;
-        role: UserRole;
-      };
+  async create(req: Request, res: Response): Promise<void> {
+    const { fullName, email, password, role } = req.body as {
+      fullName: string;
+      email: string;
+      password: string;
+      role: UserRole;
+    };
 
-      if (!Object.values(UserRole).includes(role)) {
-        res.status(400).json({ message: "Rol inválido." });
-        return;
-      }
-
-      const newUser = AuthService.registerUser({ fullName, email, password, role });
-      res.status(201).json(newUser);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
+    if (!Object.values(UserRole).includes(role)) {
+      throw new ValidationError("Rol inválido.");
     }
+
+    const newUser = await AuthService.registerUser({ fullName, email, password, role });
+    res.status(201).json(newUser);
   },
 
-  getById(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
-      const user = UserService.getUserById(id);
-      res.status(200).json(user);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async getById(req: Request, res: Response): Promise<void> {
+    const user = await UserService.getUserById(requireParam(req, "id"));
+    res.status(200).json(user);
   },
 
-  changeStatus(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
-      const { status } = req.body as { status: UserStatus };
-      const updated = UserService.changeStatus(id, status);
-      res.status(200).json(updated);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async changeStatus(req: Request, res: Response): Promise<void> {
+    const { status } = req.body as { status: UserStatus };
+    const updated = await UserService.changeStatus(requireParam(req, "id"), status);
+    res.status(200).json(updated);
   },
 
-  assignRole(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
-      const { role } = req.body as { role: UserRole };
-      const updated = UserService.assignRole(id, role);
-      res.status(200).json(updated);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async assignRole(req: Request, res: Response): Promise<void> {
+    const { role } = req.body as { role: UserRole };
+    const updated = await UserService.assignRole(requireParam(req, "id"), role);
+    res.status(200).json(updated);
   },
 };

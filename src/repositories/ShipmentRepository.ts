@@ -1,30 +1,33 @@
 import { Shipment } from "../models/Shipment";
+import { clone } from "./clone";
 
 const shipments: Shipment[] = [];
 
 export const ShipmentRepository = {
-  findById(id: string): Shipment | undefined {
-    return shipments.find((shipment) => shipment.id === id);
+  async findById(id: string): Promise<Shipment | undefined> {
+    const shipment = shipments.find((s) => s.id === id);
+    return shipment && clone(shipment);
   },
 
-  findByOrderId(orderId: string): Shipment | undefined {
-    return shipments.find((shipment) => shipment.orderId === orderId);
+  async findByOrderId(orderId: string): Promise<Shipment | undefined> {
+    const shipment = shipments.find((s) => s.orderId === orderId);
+    return shipment && clone(shipment);
   },
 
-  findAll(): Shipment[] {
-    return [...shipments];
+  async findAll(): Promise<Shipment[]> {
+    return clone(shipments);
   },
 
-  create(shipment: Shipment): Shipment {
-    shipments.push(shipment);
-    return shipment;
+  async create(shipment: Shipment): Promise<Shipment> {
+    shipments.push(clone(shipment));
+    return clone(shipment);
   },
 
-  update(id: string, updatedFields: Partial<Shipment>): Shipment | undefined {
-    const shipment = this.findById(id);
+  async update(id: string, updatedFields: Partial<Shipment>): Promise<Shipment | undefined> {
+    const shipment = shipments.find((s) => s.id === id);
     if (!shipment) return undefined;
 
-    Object.assign(shipment, updatedFields);
-    return shipment;
+    Object.assign(shipment, clone(updatedFields));
+    return clone(shipment);
   },
 };

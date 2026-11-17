@@ -6,117 +6,84 @@ import { ReturnRequest } from "../models/ReturnRequest";
 import { AuthUser } from "../models/AuthUser";
 import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
+import { ForbiddenError, ValidationError } from "../errors/AppError";
+import { requireParam } from "../utils/params";
 
 // Quién puede ver o procesar una devolución concreta:
 // - ADMIN y SUPERVISOR: cualquiera
 // - BUYER: solo las de sus propios pedidos
 // - SELLER: solo las de productos que le pertenecen
-function canAccessReturn(authUser: AuthUser, request: ReturnRequest): boolean {
+async function canAccessReturn(authUser: AuthUser, request: ReturnRequest): Promise<boolean> {
   switch (authUser.role) {
     case UserRole.ADMIN:
     case UserRole.SUPERVISOR:
       return true;
     case UserRole.BUYER:
-      return OrderService.getOrderById(request.orderId).buyerId === authUser.id;
+      return (await OrderService.getOrderById(request.orderId)).buyerId === authUser.id;
     case UserRole.SELLER:
-      return ProductService.getProductById(request.productId).sellerId === authUser.id;
+      return (await ProductService.getProductById(request.productId)).sellerId === authUser.id;
     default:
       return false;
   }
 }
 
 export const ReturnController = {
-  register(req: Request, res: Response): void {
-    try {
-      const authUser = getAuthUser(res);
-      const { orderId, productId, quantity, reason } = req.body as {
-        orderId: string;
-        productId: string;
-        quantity: number;
-        reason: string;
-      };
-      // El comprador sale del token: nadie puede pedir devoluciones a nombre de otro
-      const request = ReturnService.registerReturn({
-        orderId,
-        buyerId: authUser.id,
-        productId,
-        quantity,
-        reason,
-      });
-      res.status(201).json(request);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async register(req: Request, res: Response): Promise<void> {
+    const authUser = getAuthUser(res);
+    const { orderId, productId, quantity, reason } = req.body as {
+      orderId: string;
+      productId: string;
+      quantity: number;
+      reason: string;
+    };
+    // El comprador sale del token: nadie puede pedir devoluciones a nombre de otro
+    const request = await ReturnService.registerReturn({
+      orderId,
+      buyerId: authUser.id,
+      productId,
+      quantity,
+      reason,
+    });
+    res.status(201).json(request);
   },
 
-  getById(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
-
-      const request = ReturnService.getReturnById(id);
-      if (!canAccessReturn(getAuthUser(res), request)) {
-        res.status(403).json({ message: "No tienes permisos para ver esta devolución." });
-        return;
-      }
-
-      res.status(200).json(request);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
+  async getById(req: Request, res: Response): Promise<void> {
+    const request = await ReturnService.getReturnById(requireParam(req, "id"));
+    if (!(await canAccessReturn(getAuthUser(res), request))) {
+      throw new ForbiddenError("No tienes permisos para ver esta devolución.");
     }
+    res.status(200).json(request);
   },
 
-  getByOrder(req: Request, res: Response): void {
-    try {
-      const { orderId } = req.params;
-      if (typeof orderId !== "string") {
-        res.status(400).json({ message: "El parámetro 'orderId' es requerido." });
-        return;
-      }
+  async getByOrder(req: Request, res: Response): Promise<void> {
+    const orderId = requireParam(req, "orderId");
+    const authUser = getAuthUser(res);
 
-      const authUser = getAuthUser(res);
-      if (
-        authUser.role === UserRole.BUYER &&
-        OrderService.getOrderById(orderId).buyerId !== authUser.id
-      ) {
-        res.status(403).json({ message: "Solo puedes consultar las devoluciones de tus pedidos." });
-        return;
+    if (authUser.role === UserRole.BUYER) {
+      const order = await OrderService.getOrderById(orderId);
+      if (order.buyerId !== authUser.id) {
+        throw new ForbiddenError("Solo puedes consultar las devoluciones de tus pedidos.");
       }
-
-      const requests = ReturnService.getReturnsByOrder(orderId);
-      res.status(200).json(requests);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
     }
+
+    const requests = await ReturnService.getReturnsByOrder(orderId);
+    res.status(200).json(requests);
   },
 
-  process(req: Request, res: Response): void {
-    try {
-      const { id } = req.params;
-      if (typeof id !== "string") {
-        res.status(400).json({ message: "El parámetro 'id' es requerido." });
-        return;
-      }
+  async process(req: Request, res: Response): Promise<void> {
+    const id = requireParam(req, "id");
 
-      const { approve } = req.body as { approve: boolean };
-      if (typeof approve !== "boolean") {
-        res.status(400).json({ message: "El campo 'approve' debe ser true o false." });
-        return;
-      }
-
-      const request = ReturnService.getReturnById(id);
-      if (!canAccessReturn(getAuthUser(res), request)) {
-        res.status(403).json({ message: "Solo puedes procesar devoluciones de tus propios productos." });
-        return;
-      }
-
-      const updated = ReturnService.processReturn(id, approve);
-      res.status(200).json(updated);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
+    const { approve } = req.body as { approve: boolean };
+    if (typeof approve !== "boolean") {
+      throw new ValidationError("El campo 'approve' debe ser true o false.");
     }
+
+    const request = await ReturnService.getReturnById(id);
+    if (!(await canAccessReturn(getAuthUser(res), request))) {
+      throw new ForbiddenError("Solo puedes procesar devoluciones de tus propios productos.");
+    }
+
+    const updated = await ReturnService.processReturn(id, approve);
+    res.status(200).json(updated);
   },
 };

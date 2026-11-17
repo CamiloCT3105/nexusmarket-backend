@@ -3,38 +3,27 @@ import { AuthService } from "../services/AuthService";
 import { UserService } from "../services/UserService";
 import { getAuthUser } from "../middlewares/authenticate";
 
+// Los errores no se capturan aquí: Express 5 los envía al middleware central (errorHandler)
 export const AuthController = {
-  register(req: Request, res: Response): void {
-    try {
-      const { fullName, email, password } = req.body as {
-        fullName: string;
-        email: string;
-        password: string;
-      };
-      const user = AuthService.registerBuyerAccount({ fullName, email, password });
-      res.status(201).json(user);
-    } catch (error) {
-      res.status(400).json({ message: (error as Error).message });
-    }
+  async register(req: Request, res: Response): Promise<void> {
+    const { fullName, email, password } = req.body as {
+      fullName: string;
+      email: string;
+      password: string;
+    };
+    const user = await AuthService.registerBuyerAccount({ fullName, email, password });
+    res.status(201).json(user);
   },
 
-  login(req: Request, res: Response): void {
-    try {
-      const { email, password } = req.body as { email: string; password: string };
-      const result = AuthService.login(email, password);
-      res.status(200).json(result);
-    } catch (error) {
-      res.status(401).json({ message: (error as Error).message });
-    }
+  async login(req: Request, res: Response): Promise<void> {
+    const { email, password } = req.body as { email: string; password: string };
+    const result = await AuthService.login(email, password);
+    res.status(200).json(result);
   },
 
-  me(_req: Request, res: Response): void {
-    try {
-      const authUser = getAuthUser(res);
-      const user = UserService.getUserById(authUser.id);
-      res.status(200).json(user);
-    } catch (error) {
-      res.status(404).json({ message: (error as Error).message });
-    }
+  async me(_req: Request, res: Response): Promise<void> {
+    const authUser = getAuthUser(res);
+    const user = await UserService.getUserById(authUser.id);
+    res.status(200).json(user);
   },
 };

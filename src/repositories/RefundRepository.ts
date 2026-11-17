@@ -1,30 +1,33 @@
 import { Refund } from "../models/Refund";
+import { clone } from "./clone";
 
 const refunds: Refund[] = [];
 
 export const RefundRepository = {
-  findById(id: string): Refund | undefined {
-    return refunds.find((refund) => refund.id === id);
+  async findById(id: string): Promise<Refund | undefined> {
+    const refund = refunds.find((r) => r.id === id);
+    return refund && clone(refund);
   },
 
-  findByReturnId(returnId: string): Refund | undefined {
-    return refunds.find((refund) => refund.returnId === returnId);
+  async findByReturnId(returnId: string): Promise<Refund | undefined> {
+    const refund = refunds.find((r) => r.returnId === returnId);
+    return refund && clone(refund);
   },
 
-  findAll(): Refund[] {
-    return [...refunds];
+  async findAll(): Promise<Refund[]> {
+    return clone(refunds);
   },
 
-  create(refund: Refund): Refund {
-    refunds.push(refund);
-    return refund;
+  async create(refund: Refund): Promise<Refund> {
+    refunds.push(clone(refund));
+    return clone(refund);
   },
 
-  update(id: string, updatedFields: Partial<Refund>): Refund | undefined {
-    const refund = this.findById(id);
+  async update(id: string, updatedFields: Partial<Refund>): Promise<Refund | undefined> {
+    const refund = refunds.find((r) => r.id === id);
     if (!refund) return undefined;
 
-    Object.assign(refund, updatedFields);
-    return refund;
+    Object.assign(refund, clone(updatedFields));
+    return clone(refund);
   },
 };

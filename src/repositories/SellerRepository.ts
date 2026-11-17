@@ -1,26 +1,28 @@
 import { Seller } from "../models/Seller";
+import { clone } from "./clone";
 
 const sellers: Seller[] = [];
 
 export const SellerRepository = {
-  findAll(): Seller[] {
-    return sellers;
+  async findAll(): Promise<Seller[]> {
+    return clone(sellers);
   },
 
-  findByUserId(userId: string): Seller | undefined {
-    return sellers.find((seller) => seller.userId === userId);
+  async findByUserId(userId: string): Promise<Seller | undefined> {
+    const seller = sellers.find((s) => s.userId === userId);
+    return seller && clone(seller);
   },
 
-  create(seller: Seller): Seller {
-    sellers.push(seller);
-    return seller;
+  async create(seller: Seller): Promise<Seller> {
+    sellers.push(clone(seller));
+    return clone(seller);
   },
 
-  update(userId: string, updatedFields: Partial<Seller>): Seller | undefined {
-    const seller = this.findByUserId(userId);
+  async update(userId: string, updatedFields: Partial<Seller>): Promise<Seller | undefined> {
+    const seller = sellers.find((s) => s.userId === userId);
     if (!seller) return undefined;
 
-    Object.assign(seller, updatedFields);
-    return seller;
+    Object.assign(seller, clone(updatedFields));
+    return clone(seller);
   },
 };

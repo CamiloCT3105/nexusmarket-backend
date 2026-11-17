@@ -21,22 +21,42 @@ routes ─────────── asocia URL + método con un controller 
   │                (authorize · ownerOrRoles)
   ▼
 controllers ────── traduce HTTP → llamada al servicio; valida parámetros; controla la
-  │                propiedad del recurso; traduce errores a códigos HTTP
+  │                propiedad del recurso
   ▼
-services ───────── lógica de negocio y reglas; coordina otros servicios
-  │
+services ───────── lógica de negocio y reglas; coordina otros servicios;
+  │                lanza errores tipados (ValidationError, NotFoundError…)
   ▼
-repositories ───── acceso a datos (hoy arrays en memoria)
+repositories ───── acceso a datos asíncrono (hoy arrays en memoria)
+
+errorHandler ───── middleware final: convierte cualquier error en la respuesta HTTP
 ```
+
+Todas las capas, desde el repositorio hasta el controller, son **asíncronas** (`async`/`await`). Los repositorios en memoria devuelven **copias** de lo guardado, igual que lo haría una base de datos: para persistir un cambio hay que llamar a `update()`. Así, cambiar los arrays por PostgreSQL o MongoDB solo toca la capa `repositories`.
+
+### Manejo de errores
+
+Los servicios no conocen HTTP: expresan **qué pasó** lanzando una clase de `src/errors/AppError.ts`, y el middleware `errorHandler` decide la respuesta. Express 5 envía automáticamente a ese middleware cualquier error lanzado dentro de un controller `async`, por eso los controllers no usan `try/catch`.
+
+| Clase | Código | Cuándo |
+|---|---|---|
+| `ValidationError` | `400` | Datos inválidos o regla de negocio incumplida (transición inválida, stock insuficiente…) |
+| `UnauthorizedError` | `401` | Falta el token, el token no es válido o las credenciales son incorrectas |
+| `ForbiddenError` | `403` | Rol sin permiso, recurso ajeno o cuenta bloqueada |
+| `NotFoundError` | `404` | El recurso pedido (o uno del que depende) no existe |
+| `ConflictError` | `409` | El recurso ya existe (correo, perfil, factura, envío o reembolso duplicados) |
+| Cualquier otro | `500` | Fallo inesperado: se registra en consola y el cliente recibe un mensaje genérico |
+
+El JSON mal formado responde `400` y las rutas inexistentes `404`.
 
 | Capa | Carpeta | Responsabilidad | Lo que NO debe hacer |
 |---|---|---|---|
 | Modelos | `src/models` | Describir la forma de los datos (interfaces y enums). | Contener lógica. |
-| Repositorios | `src/repositories` | Leer y escribir datos. | Conocer reglas de negocio ni llamar a servicios. |
-| Servicios | `src/services` | Aplicar reglas de negocio. | Conocer HTTP (`req`, `res`) ni acceder a repositorios de otros módulos. |
+| Repositorios | `src/repositories` | Leer y escribir datos (asíncrono). | Conocer reglas de negocio ni llamar a servicios. |
+| Servicios | `src/services` | Aplicar reglas de negocio y lanzar errores tipados. | Conocer HTTP (`req`, `res`, códigos de estado) ni acceder a repositorios de otros módulos. |
+| Errores | `src/errors` | Definir las clases de error y su código HTTP. | Contener lógica. |
 | Controllers | `src/controllers` | Adaptar HTTP al servicio y verificar propiedad del recurso. | Contener reglas de negocio. |
 | Rutas | `src/routes` | Declarar endpoints y permisos por rol. | Contener lógica. |
-| Middlewares | `src/middlewares` | Autenticación y autorización transversales. | Contener reglas de negocio. |
+| Middlewares | `src/middlewares` | Autenticación, autorización y manejo de errores transversales. | Contener reglas de negocio. |
 | Utilidades | `src/utils` | Funciones puras de apoyo (hash de contraseñas, JWT). | Depender de otras capas. |
 
 ## 3. Mapa de dependencias entre servicios
@@ -176,6 +196,11 @@ stateDiagram-v2
 | D-21 | **Pago simulado** (`POST /orders/:id/pay`). | La especificación no define pasarela de pagos. | Integrar una pasarela real. |
 | D-22 | **Reportes de solo lectura** consolidados desde los servicios, sin repositorio propio. | Un reporte es una vista de datos de otros módulos (OBJ-12), no una entidad. | Duplicar datos en una tabla de reportes. |
 | D-23 | `reserve`, `outbound` y `return` de inventario **solo para ADMIN**. | Son operaciones internas del sistema; abiertas, un vendedor podría reservar el stock de otro. | Exponerlas a vendedores. |
+| D-24 | **Todas las capas asíncronas**, todavía con almacenamiento en memoria. | Cualquier base de datos responde con promesas; migrar primero la firma permite conectar PostgreSQL y MongoDB cambiando solo los repositorios. | Conectar la base de datos y pasar a `async` al mismo tiempo. |
+| D-25 | **Repositorios en memoria que devuelven copias** (`structuredClone`). | Simulan una base de datos real: si un servicio modifica un objeto sin llamar a `update()`, el cambio se pierde ya hoy y no al migrar. Así se encontró que `linkToSeller` no guardaba el `sellerId` de la bodega. | Devolver referencias a los objetos guardados. |
+| D-26 | **Errores tipados + middleware central** en lugar de `try/catch` con códigos fijos en cada controller. | Antes, un mismo error podía responder `400` o `404` según el controller. Ahora el código lo decide el tipo de error, en un solo lugar, y los fallos inesperados responden `500` sin filtrar detalles. | Mantener `try/catch` por controller. |
+| D-27 | **`404` para recursos inexistentes y `409` para duplicados** en todos los endpoints. | Códigos coherentes en toda la API. Antes varios endpoints respondían `400` en ambos casos. | Responder siempre `400`. |
+| D-28 | **Login de cuenta bloqueada responde `403`** (antes `401`). | Las credenciales son correctas: el problema es de permiso, igual que en `authenticate`. | Mantener `401`. |
 
 ## 8. Limitaciones conocidas
 
@@ -186,6 +211,7 @@ Se documentan de forma honesta para que no se confundan con funcionalidades:
 - **Los productos digitales también pasan por inventario**, aunque conceptualmente no tienen stock físico.
 - **Toda unidad devuelta vuelve al stock disponible**; no se distingue si regresó defectuosa.
 - **Aprobar una devolución no es atómico**: con una base de datos real debería ir en una transacción.
+- **El checkout no es atómico frente a peticiones simultáneas**: al ser asíncrono, dos checkouts del mismo producto pueden intercalarse entre la validación y la reserva (la reserva vuelve a validar el stock, pero podrían quedar reservas parciales). Se resolverá con una transacción SQL y bloqueo de filas de inventario.
 - **`PATCH /orders/:id/status` (solo ADMIN) puede desincronizar** un pedido respecto de su envío; es una herramienta administrativa.
 - **`Seller.warehouseIds` solo se actualiza** al vincular una bodega (`link-seller`) o asignarla por el perfil; crear una bodega con `sellerId` no lo actualiza.
 - **Validación de entrada limitada**: no se verifica que los valores de enums enviados en el body (`status`, `type`, `commercialStatus`…) pertenezcan al enum, ni se usa una librería de validación.
