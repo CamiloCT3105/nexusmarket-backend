@@ -5,7 +5,8 @@ import { ReturnRepository } from "../repositories/ReturnRepository";
 import { OrderService } from "./OrderService";
 import { InventoryService } from "./InventoryService";
 import { RefundService } from "./RefundService";
-import { NotFoundError, ValidationError } from "../errors/AppError";
+import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
+import { transaction } from "../db/transaction";
 
 type RegisterReturnInput = {
   orderId: string;
@@ -17,54 +18,50 @@ type RegisterReturnInput = {
 
 export const ReturnService = {
   async registerReturn(input: RegisterReturnInput): Promise<ReturnRequest> {
-    if (input.quantity <= 0) {
-      throw new ValidationError("La cantidad a devolver debe ser mayor a cero.");
+    if (!Number.isInteger(input.quantity) || input.quantity <= 0) {
+      throw new ValidationError("La cantidad a devolver debe ser un número entero mayor a cero.");
     }
     if (typeof input.reason !== "string" || input.reason.trim() === "") {
       throw new ValidationError("El motivo de la devolución es obligatorio.");
     }
 
-    const order = await OrderService.getOrderById(input.orderId);
+    return transaction(async () => {
+      // Bloquea el pedido: dos solicitudes simultáneas se validan una después de la otra,
+      // así entre las dos nunca superan las unidades compradas.
+      await OrderService.lockOrder(input.orderId);
+      const order = await OrderService.getOrderById(input.orderId);
 
-    if (order.buyerId !== input.buyerId) {
-      throw new ValidationError("Este pedido no pertenece al comprador indicado.");
-    }
-    if (order.status !== OrderStatus.DELIVERED) {
-      throw new ValidationError("Solo se pueden devolver productos de pedidos entregados.");
-    }
+      if (order.buyerId !== input.buyerId) {
+        throw new ValidationError("Este pedido no pertenece al comprador indicado.");
+      }
+      if (order.status !== OrderStatus.DELIVERED) {
+        throw new ValidationError("Solo se pueden devolver productos de pedidos entregados.");
+      }
 
-    const orderItem = order.items.find((item) => item.productId === input.productId);
-    if (!orderItem) {
-      throw new ValidationError("El producto no hace parte de este pedido.");
-    }
+      const orderItem = order.items.find((item) => item.productId === input.productId);
+      if (!orderItem) {
+        throw new ValidationError("El producto no hace parte de este pedido.");
+      }
 
-    // Unidades ya devueltas (solicitadas o aprobadas) de este producto en este pedido
-    const previousReturns = await ReturnRepository.findByOrderAndProduct(
-      input.orderId,
-      input.productId
-    );
-    const alreadyReturned = previousReturns
-      .filter((request) => request.status !== ReturnStatus.REJECTED)
-      .reduce((sum, request) => sum + request.quantity, 0);
+      // Unidades ya devueltas (solicitadas o aprobadas) de este producto en este pedido
+      const alreadyReturned = await ReturnRepository.sumActiveQuantity(input.orderId, input.productId);
+      const returnable = orderItem.quantity - alreadyReturned;
+      if (input.quantity > returnable) {
+        throw new ValidationError(
+          `Cantidad inválida. Unidades que aún se pueden devolver de este producto: ${returnable}.`
+        );
+      }
 
-    const returnable = orderItem.quantity - alreadyReturned;
-    if (input.quantity > returnable) {
-      throw new ValidationError(
-        `Cantidad inválida. Unidades que aún se pueden devolver de este producto: ${returnable}.`
-      );
-    }
-
-    const request: ReturnRequest = {
-      id: randomUUID(),
-      orderId: input.orderId,
-      productId: input.productId,
-      quantity: input.quantity,
-      reason: input.reason,
-      status: ReturnStatus.REQUESTED,
-      createdAt: new Date(),
-    };
-
-    return ReturnRepository.create(request);
+      return ReturnRepository.create({
+        id: randomUUID(),
+        orderId: input.orderId,
+        productId: input.productId,
+        quantity: input.quantity,
+        reason: input.reason,
+        status: ReturnStatus.REQUESTED,
+        createdAt: new Date(),
+      });
+    });
   },
 
   async getReturnById(id: string): Promise<ReturnRequest> {
@@ -89,25 +86,29 @@ export const ReturnService = {
       throw new ValidationError("Esta devolución ya fue procesada.");
     }
 
-    if (!approve) {
-      return (await ReturnRepository.update(returnId, { status: ReturnStatus.REJECTED }))!;
-    }
-
     const order = await OrderService.getOrderById(request.orderId);
     const orderItem = order.items.find((item) => item.productId === request.productId);
     if (!orderItem) {
       throw new ValidationError("El producto de la devolución no existe en el pedido.");
     }
 
-    // PENDIENTE (paso de base de datos): estos tres pasos deben ir en una sola transacción.
+    const newStatus = approve ? ReturnStatus.APPROVED : ReturnStatus.REJECTED;
 
-    // 1. La mercancía vuelve al inventario de la bodega de la que salió
-    await InventoryService.registerReturn(orderItem.productId, orderItem.warehouseId, request.quantity);
+    // Todo o nada: estado de la devolución, reingreso al inventario y reembolso
+    await transaction(async () => {
+      // Se "reclama" la devolución primero: si otra petición ya la procesó, esta no hace nada
+      if (!(await ReturnRepository.updateStatusIf(returnId, ReturnStatus.REQUESTED, newStatus))) {
+        throw new ConflictError("Esta devolución ya fue procesada por otra solicitud.");
+      }
+      if (!approve) return;
 
-    // 2. Se genera el reembolso, usando el precio que se pagó (no el actual del producto)
-    await RefundService.generateRefund(request.id, orderItem.unitPrice * request.quantity);
+      // La mercancía vuelve a la bodega de la que salió
+      await InventoryService.registerReturn(orderItem.productId, orderItem.warehouseId, request.quantity);
 
-    // 3. Se marca la devolución como aprobada
-    return (await ReturnRepository.update(returnId, { status: ReturnStatus.APPROVED }))!;
+      // Reembolso con el precio que se pagó (no el actual del producto)
+      await RefundService.generateRefund(request.id, orderItem.unitPrice * request.quantity);
+    });
+
+    return this.getReturnById(returnId);
   },
 };

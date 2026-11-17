@@ -99,6 +99,13 @@ export const OrderService = {
     return order;
   },
 
+  // Ver OrderRepository.lockForUpdate. Debe llamarse dentro de transaction().
+  async lockOrder(id: string): Promise<void> {
+    if (!(await OrderRepository.lockForUpdate(id))) {
+      throw new NotFoundError("Pedido no encontrado.");
+    }
+  },
+
   async getOrdersByBuyer(buyerId: string): Promise<Order[]> {
     return OrderRepository.findByBuyerId(buyerId);
   },

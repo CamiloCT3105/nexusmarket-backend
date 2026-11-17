@@ -9,8 +9,8 @@ const allowedTransitions: Record<RefundStatus, RefundStatus[]> = {
 };
 
 export const RefundService = {
-  // Lo llama ReturnService al aprobar una devolución. No se expone por HTTP:
-  // un reembolso solo puede nacer de una devolución aprobada.
+  // Lo llama ReturnService al aprobar una devolución (dentro de su transacción).
+  // No se expone por HTTP: un reembolso solo puede nacer de una devolución aprobada.
   async generateRefund(returnId: string, amount: number): Promise<Refund> {
     if (amount <= 0) {
       throw new ValidationError("El monto del reembolso debe ser mayor a cero.");
@@ -24,7 +24,7 @@ export const RefundService = {
     const refund: Refund = {
       id: randomUUID(),
       returnId,
-      amount,
+      amount: Math.round(amount * 100) / 100,
       status: RefundStatus.PENDING,
       createdAt: new Date(),
     };
@@ -61,6 +61,9 @@ export const RefundService = {
       );
     }
 
-    return (await RefundRepository.update(refundId, { status: newStatus }))!;
+    if (!(await RefundRepository.updateStatusIf(refundId, refund.status, newStatus))) {
+      throw new ConflictError("El reembolso cambió de estado mientras se procesaba. Intenta de nuevo.");
+    }
+    return this.getRefundById(refundId);
   },
 };

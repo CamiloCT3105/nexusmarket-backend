@@ -71,7 +71,7 @@ npm run dev
 
 Verifica que funciona abriendo `http://localhost:3000/health`, que debe responder `{ "status": "ok" }`. Si PostgreSQL no está disponible, el servidor no arranca y lo indica en la consola.
 
-> **Migración en curso:** usuarios, credenciales, compradores, vendedores, bodegas, inventario y pedidos ya viven en **PostgreSQL** y sobreviven a los reinicios. El resto de módulos todavía usa memoria y se pierde al reiniciar; se irán migrando uno por uno.
+> **Migración en curso:** todo lo relacional (usuarios, perfiles, bodegas, inventario, pedidos, facturas, envíos, devoluciones y reembolsos) ya vive en **PostgreSQL** y sobrevive a los reinicios. Productos, carritos y la bitácora de movimientos todavía usan memoria y se pierden al reiniciar; irán a MongoDB.
 
 MongoDB se publica en el puerto **27018** del equipo (no en el 27017 habitual) para no chocar con un MongoDB instalado localmente.
 
@@ -362,7 +362,7 @@ Todo el detalle funcional y técnico está en [`SDD/`](./SDD):
 
 Este proyecto es una base funcional, no un sistema listo para producción:
 
-- **Migración a base de datos en curso**: usuarios, perfiles, bodegas, inventario y pedidos están en PostgreSQL; los productos aún no, así que tras reiniciar los pedidos pueden apuntar a productos que ya no existen; el resto de módulos sigue en memoria y se pierde al reiniciar.
+- **Migración a base de datos en curso**: todo lo relacional está en PostgreSQL; productos, carritos y bitácora aún no, así que tras reiniciar los pedidos pueden apuntar a productos que ya no existen; el resto de módulos sigue en memoria y se pierde al reiniciar.
 - El **pago es simulado**: solo cambia el estado del pedido.
 - La **validación de entradas es limitada**: no se verifica que los valores de enums enviados en el body sean válidos.
 - **Sin límite de intentos de login**, sin paginación y sin pruebas automatizadas.
@@ -376,7 +376,7 @@ La lista completa está en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-li
 - [x] Usuarios y credenciales en PostgreSQL
 - [x] Compradores (con direcciones), vendedores y bodegas en PostgreSQL
 - [x] Inventario y pedidos en PostgreSQL, con checkout transaccional y a prueba de sobreventa
-- [ ] Facturas, envíos, devoluciones y reembolsos en PostgreSQL; reportes con SQL
+- [x] Facturas, envíos, devoluciones y reembolsos en PostgreSQL (transaccionales); reportes con consultas SQL agregadas
 - [ ] Catálogo, carritos y movimientos de inventario en MongoDB
 - [ ] Validación de entradas con una librería (por ejemplo, `zod`)
 - [ ] Pruebas automatizadas

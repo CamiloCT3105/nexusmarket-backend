@@ -176,7 +176,7 @@ stateDiagram-v2
 | **PostgreSQL** (Prisma) | `User`, `Credential` | Integridad y unicidad del correo. | ✅ Migrado |
 | **PostgreSQL** (Prisma) | `Buyer` (+ `buyer_addresses`), `Seller`, `Warehouse` | Relaciones fuertes con `users`; las bodegas de un vendedor se calculan con la llave foránea `warehouses.seller_id`. | ✅ Migrado |
 | **PostgreSQL** (Prisma) | `InventoryItem`, `Order` (+ `order_items`) | El checkout necesita **transacciones** y actualizaciones atómicas del inventario. | ✅ Migrado |
-| **PostgreSQL** (Prisma) | `Invoice`, `Shipment`, `ReturnRequest`, `Refund` | Dinero, máquinas de estado y relaciones fuertes con `orders`; la aprobación de devoluciones necesita transacción. Los reportes se resolverán con `GROUP BY`. | Esquema creado; repositorios pendientes |
+| **PostgreSQL** (Prisma) | `Invoice`, `Shipment` (+ `shipment_events`), `ReturnRequest`, `Refund` | Dinero, máquinas de estado y relaciones fuertes con `orders`; la aprobación de devoluciones y el seguimiento de envíos son transaccionales. Los reportes se calculan con `GROUP BY`. | ✅ Migrado |
 | **MongoDB** (Mongoose) | `Product` | Catálogo flexible: variantes y atributos distintos según el tipo de producto. | Pendiente |
 | **MongoDB** (Mongoose) | `Cart` | Un documento por comprador, de escritura frecuente y vida corta (puede expirar con índice TTL). | Pendiente |
 | **MongoDB** (Mongoose) | `InventoryMovement` | Bitácora que solo crece. Ya separada en su propio repositorio y escrita con `afterCommit`. | Pendiente |
@@ -191,7 +191,7 @@ Esquema: [`prisma/schema.prisma`](../prisma/schema.prisma). Migraciones: `prisma
 
 Lo que vive fuera de PostgreSQL (la bitácora de movimientos, el carrito) no se puede deshacer. Para eso existe `afterCommit(fn)`: la acción se ejecuta **solo si la transacción se confirma** (o de inmediato si no hay transacción). Así un checkout fallido no deja movimientos de inventario que nunca ocurrieron.
 
-Usos actuales: `AuthService.registerUser` (usuario + credencial), `OrderService.checkout` (reservas + pedido) y `OrderService.changeStatus` (estado + salida de inventario al despachar).
+Usos actuales: `AuthService.registerUser` (usuario + credencial), `OrderService.checkout` (reservas + pedido), `OrderService.changeStatus` (estado + salida de inventario al despachar), `ShipmentService.updateStatus` (envío + historial + pedido), `ReturnService.registerReturn` (bloqueo del pedido + validación + solicitud) y `ReturnService.processReturn` (estado + reingreso + reembolso).
 
 #### Concurrencia en inventario y pedidos
 
@@ -200,9 +200,11 @@ Usos actuales: `AuthService.registerUser` (usuario + credencial), `OrderService.
 | **UPDATE condicional atómico** (`UPDATE ... SET reservado = reservado + n WHERE disponible >= n`) | reservar, despachar, marcar dañado | Que dos peticiones simultáneas usen la misma unidad (sobreventa). La condición y el cambio son una sola sentencia. |
 | **`INSERT ... ON CONFLICT DO UPDATE`** (upsert de Prisma) | ingreso de mercancía | Que dos ingresos simultáneos creen dos filas o pierdan una suma. |
 | **Orden fijo de bloqueo** (producto + bodega) | checkout y despacho | Interbloqueos: dos pedidos que bloquean las mismas filas en orden opuesto. |
-| **Transición de estado condicional** (`UPDATE orders SET status = nuevo WHERE id = ? AND status = actual`) | cambio de estado de pedido | Que dos despachos simultáneos saquen el inventario dos veces; el perdedor recibe `409`. |
+| **Transición de estado condicional** (`UPDATE ... SET status = nuevo WHERE id = ? AND status = actual`) | pedidos, envíos, devoluciones y reembolsos | Aplicar dos veces los efectos de una transición (doble despacho, dos reembolsos por una devolución); el perdedor recibe `409`. |
+| **Bloqueo de fila** (`SELECT ... FOR UPDATE` sobre el pedido) | solicitar devolución | Que varias solicitudes simultáneas, cada una válida por separado, superen juntas las unidades compradas. |
+| **Restricción `UNIQUE`** (`invoices.order_id`, `shipments.order_id`, `refunds.return_id`) | facturar, crear envío, generar reembolso | Duplicados cuando dos solicitudes pasan el chequeo previo a la vez; la segunda recibe `409`. |
 
-Probado con peticiones simultáneas reales: 5 checkouts de 3 unidades sobre un stock de 10 (3 pedidos, 9 reservadas); 6 checkouts cruzados de dos productos con stock para uno solo (1 pedido, sin deadlocks, sin reservas parciales); y dos despachos simultáneos del mismo pedido (un `200`, un `409`, el stock sale una vez).
+Probado con peticiones simultáneas reales: 5 checkouts de 3 unidades sobre un stock de 10 (3 pedidos, 9 reservadas); 6 checkouts cruzados de dos productos con stock para uno solo (1 pedido, sin deadlocks, sin reservas parciales); y dos despachos simultáneos del mismo pedido (un `200`, un `409`, el stock sale una vez). En posventa: facturas y envíos duplicados simultáneos (un `201`, un `409`), tres devoluciones simultáneas de 2 unidades sobre 3 compradas (solo una se crea), y dos aprobaciones simultáneas de la misma devolución (un solo reembolso y un solo reingreso).
 
 ## 7. Registro de decisiones
 
@@ -227,9 +229,9 @@ Probado con peticiones simultáneas reales: 5 checkouts de 3 unidades sobre un s
 | D-17 | **Autorización en dos niveles**: por rol (middleware en la ruta) y por propiedad (en el controller). | Un rol correcto no basta: un vendedor no debe tocar productos de otro. | Solo control por rol. |
 | D-18 | **La identidad sale del token, nunca del body.** | El cliente no puede suplantar a otra persona enviando un `buyerId` o `sellerId` ajeno. | Leer `buyerId` del body. |
 | D-19 | Pasar el usuario autenticado por **`res.locals`**. | Evita ampliar los tipos de Express con declaraciones globales, que fallan con `ts-node-dev`. | `req.user` con declaración global. |
-| D-20 | El **envío conduce el estado del pedido**; el pedido se actualiza primero. | Si falla el pedido (por ejemplo, por inventario), el envío no cambia y no quedan desincronizados. | Que cada módulo cambie su estado por separado. |
+| D-20 | El **envío conduce el estado del pedido**; el pedido se actualiza primero (desde D-45, ambos en una misma transacción). | Si falla el pedido (por ejemplo, por inventario), el envío no cambia y no quedan desincronizados. | Que cada módulo cambie su estado por separado. |
 | D-21 | **Pago simulado** (`POST /orders/:id/pay`). | La especificación no define pasarela de pagos. | Integrar una pasarela real. |
-| D-22 | **Reportes de solo lectura** consolidados desde los servicios, sin repositorio propio. | Un reporte es una vista de datos de otros módulos (OBJ-12), no una entidad. | Duplicar datos en una tabla de reportes. |
+| D-22 | **Reportes de solo lectura** consolidados desde los servicios, sin repositorio propio (reemplazada por D-44). | Un reporte es una vista de datos de otros módulos (OBJ-12), no una entidad. | Duplicar datos en una tabla de reportes. |
 | D-23 | `reserve`, `outbound` y `return` de inventario **solo para ADMIN**. | Son operaciones internas del sistema; abiertas, un vendedor podría reservar el stock de otro. | Exponerlas a vendedores. |
 | D-24 | **Todas las capas asíncronas**, todavía con almacenamiento en memoria. | Cualquier base de datos responde con promesas; migrar primero la firma permite conectar PostgreSQL y MongoDB cambiando solo los repositorios. | Conectar la base de datos y pasar a `async` al mismo tiempo. |
 | D-25 | **Repositorios en memoria que devuelven copias** (`structuredClone`). | Simulan una base de datos real: si un servicio modifica un objeto sin llamar a `update()`, el cambio se pierde ya hoy y no al migrar. Así se encontró que `linkToSeller` no guardaba el `sellerId` de la bodega. | Devolver referencias a los objetos guardados. |
@@ -251,16 +253,19 @@ Probado con peticiones simultáneas reales: 5 checkouts de 3 unidades sobre un s
 | D-41 | **Transiciones de estado de pedido condicionales** (`WHERE status = actual`), con `409` para el perdedor. | Control de concurrencia optimista: impide aplicar dos veces los efectos de una transición (doble despacho). | Bloqueo pesimista de la fila del pedido. |
 | D-42 | **`afterCommit` para lo que vive fuera de PostgreSQL** (bitácora de movimientos, vaciado del carrito). | Un rollback no puede deshacer escrituras en memoria o en MongoDB; diferirlas evita registros fantasma. | Escribirlas dentro de la transacción. |
 | D-43 | **Cantidades enteras positivas** validadas en carrito e inventario. | Las columnas son `INT`; una cantidad como `1.5` terminaba en `500` al llegar a la base de datos. | Redondear en silencio. |
+| D-44 | **`ReportRepository` de solo lectura con consultas agregadas** (`GROUP BY`, `SUM`, `COUNT`, y SQL directo para `cantidad × precio`). | Los reportes cruzan tablas; la base devuelve solo totales en lugar de enviar todas las filas a Node. Es una vista de lectura: nunca escribe. | Seguir sumando en memoria (D-22): no escala con el volumen de pedidos. |
+| D-45 | **Envío, historial y pedido en una sola transacción.** | Reemplaza el orden "primero el pedido, después el envío" de D-20 por atomicidad real: no pueden quedar desincronizados ni ante un fallo a mitad de camino. | Mantener el orden de operaciones sin transacción. |
+| D-46 | **Bloqueo pesimista del pedido al solicitar devoluciones** (`SELECT ... FOR UPDATE`). | La validación suma lo ya devuelto y luego inserta: es una lectura seguida de escritura que no cabe en un `UPDATE` condicional. El bloqueo es por pedido, así que no frena a otros compradores. | Nivel de aislamiento `SERIALIZABLE` con reintentos. |
+| D-47 | **Transiciones condicionales también en envíos, devoluciones y reembolsos.** | Mismo patrón que D-41: un solo ganador por transición; los efectos (reingreso, reembolso) no se duplican. | Confiar en el chequeo previo del servicio. |
 
 ## 8. Limitaciones conocidas
 
 Se documentan de forma honesta para que no se confundan con funcionalidades:
 
-- **Migración a base de datos incompleta**: usuarios, credenciales, perfiles, bodegas, inventario y pedidos están en PostgreSQL; productos, carritos, bitácora, facturas, envíos, devoluciones y reembolsos siguen en memoria y se pierden al reiniciar. Mientras tanto, tras un reinicio quedan pedidos e inventario que apuntan a productos que ya no existen (los reportes los muestran como "Producto desconocido"). Se resuelve al llevar el catálogo a MongoDB.
+- **Migración a base de datos incompleta**: todo lo relacional ya está en PostgreSQL; productos, carritos y bitácora de movimientos siguen en memoria (irán a MongoDB) y se pierden al reiniciar. Mientras tanto, tras un reinicio quedan pedidos e inventario que apuntan a productos que ya no existen (los reportes los muestran como "Producto desconocido"). Se resuelve al llevar el catálogo a MongoDB.
 - **El pago es simulado**: solo cambia el estado del pedido.
 - **Los productos digitales también pasan por inventario**, aunque conceptualmente no tienen stock físico.
 - **Toda unidad devuelta vuelve al stock disponible**; no se distingue si regresó defectuosa.
-- **Aprobar una devolución no es atómico**: con una base de datos real debería ir en una transacción.
 - **`PATCH /orders/:id/status` (solo ADMIN) puede desincronizar** un pedido respecto de su envío; es una herramienta administrativa.
 - **Validación de entrada limitada**: no se verifica que los valores de enums enviados en el body (`status`, `type`, `commercialStatus`…) pertenezcan al enum, ni se usa una librería de validación.
 - **Los correos no se normalizan** (mayúsculas y minúsculas cuentan como distintos).
