@@ -107,7 +107,8 @@ model Buyer {
   @@map("buyers")
 }
 
-// Dirección principal (isPrimary = true) y adicionales del comprador
+// Dirección principal (isPrimary = true) y adicionales del comprador.
+// position conserva el orden en que se agregaron (SQL no garantiza orden sin ORDER BY).
 model BuyerAddress {
   id         String  @id @default(uuid()) @db.Uuid
   buyerId    String  @map("buyer_id") @db.Uuid
@@ -116,10 +117,11 @@ model BuyerAddress {
   country    String
   postalCode String  @map("postal_code")
   isPrimary  Boolean @default(false) @map("is_primary")
+  position   Int     @default(0)
 
   buyer Buyer @relation(fields: [buyerId], references: [userId], onDelete: Cascade)
 
-  @@index([buyerId])
+  @@index([buyerId, position])
   @@map("buyer_addresses")
 }
 

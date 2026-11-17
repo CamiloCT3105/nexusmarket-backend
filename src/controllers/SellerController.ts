@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { SellerService } from "../services/SellerService";
+import { WarehouseService } from "../services/WarehouseService";
 import { requireParam } from "../utils/params";
 
 export const SellerController = {
@@ -14,9 +15,11 @@ export const SellerController = {
     res.status(200).json(seller);
   },
 
+  // Vista desde el vendedor de la misma operación que PATCH /warehouses/:id/link-seller
   async assignWarehouse(req: Request, res: Response): Promise<void> {
+    const userId = requireParam(req, "userId");
     const { warehouseId } = req.body as { warehouseId: string };
-    const updated = await SellerService.assignWarehouse(requireParam(req, "userId"), warehouseId);
-    res.status(200).json(updated);
+    await WarehouseService.linkToSeller(warehouseId, userId);
+    res.status(200).json(await SellerService.getSellerByUserId(userId));
   },
 };

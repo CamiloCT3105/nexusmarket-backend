@@ -2,6 +2,7 @@ import { User, UserRole, UserStatus } from "../models/User";
 import { db } from "../db/transaction";
 import { Prisma } from "../generated/prisma/client";
 import { isRecordNotFound } from "../db/prismaErrors";
+import { isUuid } from "../db/ids";
 
 // PostgreSQL (tabla users). Solo se leen las columnas que forman parte del modelo.
 const userColumns = {
@@ -32,6 +33,7 @@ export const UserRepository = {
   },
 
   async findById(id: string): Promise<User | undefined> {
+    if (!isUuid(id)) return undefined;
     const row = await db().user.findUnique({ where: { id }, select: userColumns });
     return row ? toUser(row) : undefined;
   },
@@ -47,6 +49,7 @@ export const UserRepository = {
   },
 
   async update(id: string, updatedFields: Partial<User>): Promise<User | undefined> {
+    if (!isUuid(id)) return undefined;
     try {
       const row = await db().user.update({
         where: { id },

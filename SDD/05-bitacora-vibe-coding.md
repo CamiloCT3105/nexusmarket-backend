@@ -76,6 +76,7 @@ Entregable
 | 11 | **Documentación** (`README` y `SDD/`) | Deja el proyecto entendible sin leer el código. |
 | 12 | **Capas asíncronas y manejo central de errores** | Primer paso hacia la base de datos (PostgreSQL + MongoDB): se cambia la firma de todas las capas sin cambiar el almacenamiento todavía. |
 | 13 | **Infraestructura de bases de datos** (Docker, Prisma, esquema SQL, transacciones) y **usuarios + credenciales en PostgreSQL** | Usuarios es el módulo del que dependen todos los demás, igual que en la fase 1. |
+| 14 | **Compradores, vendedores y bodegas en PostgreSQL** | Mismo orden que las fases 2 y 3: perfiles y bodegas son la base de inventario y pedidos. |
 
 ## 4. Resumen por módulo
 
@@ -115,6 +116,9 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 13 | El puerto 27017 ya estaba ocupado | Hay un `mongod` instalado en el equipo. | Publicar el MongoDB de Docker en el puerto 27018. |
 | 14 | `Expected 0-1 arguments, but got 2` en `new Error(msg, { cause })` | La opción `cause` es de ES2022 y el proyecto compila a ES2020. | Incluir el detalle del error original en el mensaje. |
 | 15 | Riesgo de usuario sin credencial (evitado en el diseño) | El registro hace dos escrituras; si la segunda falla, la primera quedaba guardada. | Envolver ambas en `transaction()`; probado con cuatro registros simultáneos del mismo correo (uno `201`, tres `409`, ningún huérfano). |
+| 16 | `GET /warehouses/abc` respondía `500` | Con PostgreSQL, un id que no es UUID hace fallar la consulta (`invalid input syntax for type uuid`). En memoria simplemente no se encontraba. | Los repositorios comprueban el formato (`isUuid`) y responden "no encontrado" → `404`. |
+| 17 | Perfil de comprador sin `postalCode` respondía `500` | La columna es obligatoria en la base de datos, pero el body no se validaba; en memoria se guardaba incompleto. | Validar la dirección en `BuyerService` → `400` indicando los campos que faltan. |
+| 18 | Una bodega reasignada quedaba en la lista de dos vendedores (encontrado al diseñar la migración) | `Seller.warehouseIds` era una copia de la relación que nadie limpiaba. | Calcular la lista desde `warehouses.seller_id` (D-36). |
 
 ## 6. Aprendizajes sobre trabajar con IA
 

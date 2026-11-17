@@ -8,6 +8,8 @@ type OnboardSellerInput = {
   userId: string;
 };
 
+// Las bodegas de un vendedor se vinculan con WarehouseService.linkToSeller:
+// warehouseIds se calcula a partir de las bodegas, no se guarda aparte.
 export const SellerService = {
   async onboardSeller(input: OnboardSellerInput): Promise<Seller> {
     const user = await UserService.getUserById(input.userId);
@@ -23,12 +25,7 @@ export const SellerService = {
       throw new ConflictError("Este usuario ya está registrado como vendedor.");
     }
 
-    const newSeller: Seller = {
-      userId: input.userId,
-      warehouseIds: [],
-    };
-
-    return SellerRepository.create(newSeller);
+    return SellerRepository.create({ userId: input.userId });
   },
 
   async getSellerByUserId(userId: string): Promise<Seller> {
@@ -37,12 +34,5 @@ export const SellerService = {
       throw new NotFoundError("Vendedor no encontrado.");
     }
     return seller;
-  },
-
-  async assignWarehouse(userId: string, warehouseId: string): Promise<Seller> {
-    const seller = await this.getSellerByUserId(userId);
-    const updatedWarehouses = [...seller.warehouseIds, warehouseId];
-    const updated = await SellerRepository.update(userId, { warehouseIds: updatedWarehouses });
-    return updated!;
   },
 };
