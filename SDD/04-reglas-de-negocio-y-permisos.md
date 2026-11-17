@@ -143,20 +143,21 @@ Leyenda: ✅ puede · 🔒 puede solo sobre lo suyo · ❌ no puede.
 | Crear usuarios con cualquier rol | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Cambiar estado o rol de usuarios | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Ver un usuario | ❌ | 🔒 | 🔒 | 🔒 | ✅ | ✅ |
+| Listar y buscar usuarios | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
 | Perfil de comprador (crear / direcciones) | ❌ | 🔒 | ❌ | ❌ | ❌ | ❌ |
 | Estado comercial del comprador | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Incorporar vendedores | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Crear productos | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
 | Modificar productos (variantes / estado) | ❌ | ❌ | 🔒 | ❌ | ❌ | ✅ |
-| Consultar catálogo | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Consultar catálogo | ❌ | ✅ (publicados) | ✅ (+ los suyos) | ✅ (publicados) | ✅ | ✅ |
 | Crear bodegas | ❌ | ❌ | 🔒 | ❌ | ❌ | ✅ |
 | Consultar bodegas | ❌ | ❌ | 🔒 | ✅ | ✅ | ✅ |
-| Ingresar stock / marcar dañado | ❌ | ❌ | 🔒 | ❌ | ❌ | ✅ |
+| Ingresar stock / marcar dañado | ❌ | ❌ | 🔒 | ✅ | ❌ | ✅ |
 | Consultar inventario | ❌ | ❌ | 🔒 | ✅ | ✅ | ✅ |
 | Reservar / salida / reingreso de inventario | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Carrito | ❌ | 🔒 | ❌ | ❌ | ❌ | ❌ |
 | Hacer checkout y pagar | ❌ | 🔒 | ❌ | ❌ | ❌ | ❌ |
-| Consultar pedidos | ❌ | 🔒 | ❌ | ✅ (por id) | ✅ | ✅ |
+| Consultar pedidos | ❌ | 🔒 | 🔒 (solo sus líneas) | ✅ | ✅ | ✅ |
 | Cambiar estado de pedido a mano | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Generar facturas | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Consultar facturas | ❌ | 🔒 | ❌ | ❌ | ✅ | ✅ |
@@ -164,7 +165,7 @@ Leyenda: ✅ puede · 🔒 puede solo sobre lo suyo · ❌ no puede.
 | Consultar envíos | ❌ | 🔒 | ❌ | ✅ | ✅ | ✅ |
 | Solicitar devoluciones | ❌ | 🔒 | ❌ | ❌ | ❌ | ❌ |
 | Procesar devoluciones | ❌ | ❌ | 🔒 | ❌ | ❌ | ✅ |
-| Consultar devoluciones | ❌ | 🔒 | 🔒 (por id) | ❌ | ✅ | ✅ |
+| Consultar devoluciones | ❌ | 🔒 | 🔒 (de sus productos) | ❌ | ✅ | ✅ |
 | Completar reembolsos | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Consultar reembolsos | ❌ | 🔒 | ❌ | ❌ | ✅ | ✅ |
 | Reportes administrativos | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
@@ -173,4 +174,6 @@ Leyenda: ✅ puede · 🔒 puede solo sobre lo suyo · ❌ no puede.
 
 - 🔒 en **"Ver un usuario"** significa que cada rol puede consultar únicamente **su propio** usuario.
 - El **carrito** es privado: ni el administrador puede verlo.
+- Cambios para cumplir la **matriz de responsabilidades** de la especificación (sección 12): el **operador logístico** administra inventario (ingresos y daños, en cualquier bodega) y el **vendedor** participa en la gestión de pedidos (ve los que incluyen sus productos, solo con sus líneas).
+- **Usuarios** (sección 11): el documento de identidad y el correo son únicos; ambos se normalizan antes de comparar.
 - Los reportes consolidados no están disponibles para vendedores: cada uno consulta su negocio a través de sus propios endpoints.

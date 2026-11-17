@@ -144,3 +144,6 @@ vite.config.ts.timestamp-*
 
 # Cliente de Prisma generado (se regenera con `npx prisma generate` / postinstall)
 src/generated/
+
+# Compilación temporal de las pruebas e2e
+.e2e-build/

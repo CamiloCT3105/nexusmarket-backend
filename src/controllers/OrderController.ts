@@ -6,6 +6,7 @@ import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
 import { ForbiddenError } from "../errors/AppError";
 import { requireParam } from "../utils/params";
+import { optionalDateRange, optionalEnum, optionalString, pageRequest } from "../utils/query";
 
 // Un BUYER solo accede a sus propios pedidos; los demás roles ya fueron filtrados por la ruta
 function canAccessOrder(authUser: AuthUser, order: Order): boolean {
@@ -20,11 +21,22 @@ export const OrderController = {
     res.status(201).json(order);
   },
 
+  // GET /api/orders?status=&buyerId=&from=&to=&page=&pageSize=  (visibilidad según el rol)
+  async list(req: Request, res: Response): Promise<void> {
+    const page = await OrderService.listOrdersForViewer(
+      getAuthUser(res),
+      {
+        status: optionalEnum(req, "status", Object.values(OrderStatus)),
+        buyerId: optionalString(req, "buyerId"),
+        ...optionalDateRange(req),
+      },
+      pageRequest(req)
+    );
+    res.status(200).json(page);
+  },
+
   async getById(req: Request, res: Response): Promise<void> {
-    const order = await OrderService.getOrderById(requireParam(req, "id"));
-    if (!canAccessOrder(getAuthUser(res), order)) {
-      throw new ForbiddenError("Solo puedes consultar tus propios pedidos.");
-    }
+    const order = await OrderService.getOrderForViewer(getAuthUser(res), requireParam(req, "id"));
     res.status(200).json(order);
   },
 

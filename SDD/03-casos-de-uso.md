@@ -40,6 +40,7 @@ flowchart LR
 | Devoluciones | CU-34 a CU-36 |
 | Reembolsos | CU-37 a CU-38 |
 | Reportes | CU-39 |
+| Listados para el frontend | CU-40 a CU-41 |
 
 ---
 
@@ -49,14 +50,16 @@ flowchart LR
 - **Actor:** Visitante
 - **Precondiciones:** ninguna.
 - **Flujo principal:**
-  1. El visitante envía nombre completo, correo y contraseña.
-  2. El sistema valida que la contraseña tenga al menos 8 caracteres.
-  3. El sistema valida que el correo no esté registrado.
+  1. El visitante envía nombre completo, correo, **documento de identidad** y contraseña.
+  2. El sistema valida que la contraseña tenga al menos 8 caracteres, que el nombre no esté vacío y que correo y documento tengan formato válido.
+  3. El sistema normaliza el correo (minúsculas) y el documento (sin espacios ni puntos, en mayúsculas) y valida que **ninguno de los dos** esté registrado (sección 11 de la especificación).
   4. El sistema crea el usuario con rol `BUYER` y estado `ACTIVE`, y guarda su credencial (solo el hash).
   5. El sistema responde `201` con el usuario, sin la contraseña.
 - **Flujos alternativos:**
   - 2a. Contraseña corta → `400`.
-  - 3a. Correo ya registrado → `409`.
+  - 2b. Nombre vacío, correo inválido o documento que no tenga entre 5 y 20 letras, números o guiones → `400`.
+  - 3a. Correo ya registrado (sin importar mayúsculas) → `409`.
+  - 3b. Documento de identidad ya registrado → `409`.
   - Cualquier `role` enviado en el cuerpo se **ignora**: el registro público solo crea compradores.
 - **Postcondiciones:** existe un usuario `BUYER` activo (aún sin perfil de comprador, ver CU-07).
 - **Endpoint:** `POST /api/auth/register`
@@ -86,11 +89,11 @@ flowchart LR
 - **Actor:** Administrador
 - **Precondiciones:** sesión de administrador.
 - **Flujo principal:**
-  1. El administrador envía nombre, correo, contraseña y rol.
+  1. El administrador envía nombre, correo, documento de identidad, contraseña y rol.
   2. El sistema valida que el rol pertenezca al catálogo (`BUYER`, `SELLER`, `LOGISTICS_OPERATOR`, `ADMIN`, `SUPERVISOR`).
-  3. El sistema valida la contraseña y que el correo sea único.
+  3. El sistema valida la contraseña y que el correo y el documento sean únicos.
   4. El sistema crea el usuario `ACTIVE` con su credencial y responde `201`.
-- **Flujos alternativos:** rol inválido → `400`; correo duplicado → `409`; contraseña corta → `400`; quien llama no es administrador → `403`.
+- **Flujos alternativos:** rol inválido, datos con formato inválido o contraseña corta → `400`; correo o documento duplicado → `409`; quien llama no es administrador → `403`.
 - **Postcondiciones:** existe un usuario con el rol indicado. Si es `SELLER`, aún debe incorporarse como vendedor (CU-10).
 - **Endpoint:** `POST /api/users`
 
@@ -226,16 +229,17 @@ flowchart LR
 
 ### CU-17 Consultar el catálogo
 - **Actor:** cualquier usuario autenticado
-- **Flujo principal:** el usuario consulta un producto por id o los productos de un vendedor; el sistema responde `200`.
-- **Flujos alternativos:** producto inexistente → `404`.
-- **Endpoints:** `GET /api/products/:id`, `GET /api/products/seller/:sellerId`
+- **Flujo principal:** el usuario busca en el catálogo (texto en el nombre, tipo, vendedor, rango de precio, orden y paginación), o consulta un producto por id o los productos de un vendedor; el sistema responde `200`.
+- **Visibilidad (catálogo público, flujo 6.1 paso 4):** el comprador y el operador logístico ven solo productos `PUBLISHED`; el vendedor ve además los suyos en cualquier estado; supervisor y administrador ven todos y pueden filtrar por estado.
+- **Flujos alternativos:** producto inexistente → `404`; comprador u operador pidiendo un estado distinto de `PUBLISHED` → `403`; `minPrice` mayor que `maxPrice`, orden inexistente o parámetros mal formados → `400`.
+- **Endpoints:** `GET /api/products` (búsqueda), `GET /api/products/:id`, `GET /api/products/seller/:sellerId`
 
 ---
 
 ## Inventario
 
 ### CU-18 Registrar ingreso de mercancía
-- **Actor:** Vendedor (solo en sus bodegas) o Administrador
+- **Actor:** Vendedor (solo en sus bodegas), Operador Logístico (cualquier bodega) o Administrador — matriz de responsabilidades de la especificación
 - **Precondiciones:** el producto y la bodega existen.
 - **Flujo principal:**
   1. El actor envía producto, bodega y cantidad.
@@ -246,7 +250,7 @@ flowchart LR
 - **Endpoint:** `POST /api/inventory/inbound`
 
 ### CU-19 Marcar unidades como dañadas
-- **Actor:** Vendedor (solo sus bodegas) o Administrador
+- **Actor:** Vendedor (solo sus bodegas), Operador Logístico o Administrador
 - **Precondiciones:** existe inventario del producto en la bodega.
 - **Flujo principal:** el actor envía producto, bodega y cantidad; el sistema valida que no supere las unidades no dañadas, las suma a `damagedQuantity` y registra un movimiento `ADJUSTMENT`; responde `200`.
 - **Flujos alternativos:** cantidad que no es un entero positivo → `400`; cantidad mayor a las unidades sanas → `400`; bodega ajena (vendedor) → `403`.
@@ -324,10 +328,11 @@ flowchart LR
 - **Endpoint:** `POST /api/orders/:id/pay`
 
 ### CU-27 Consultar pedidos
-- **Actor:** Comprador (solo los suyos), Administrador, Supervisor; el Operador Logístico puede consultar un pedido por id.
-- **Flujo principal:** el actor consulta un pedido por id o los pedidos de un comprador; el sistema responde `200`.
-- **Flujos alternativos:** pedido ajeno (comprador) → `403`; pedido inexistente → `404`.
-- **Endpoints:** `GET /api/orders/:id`, `GET /api/orders/buyer/:buyerId`
+- **Actor:** Comprador (solo los suyos), **Vendedor (pedidos que incluyen sus productos)**, Operador Logístico, Supervisor, Administrador.
+- **Flujo principal:** el actor lista pedidos (filtros: estado, comprador, rango de fechas; paginado) o consulta uno por id; el sistema responde `200`.
+- **Vista del vendedor:** la matriz de responsabilidades incluye al vendedor en la gestión de pedidos. Ve solo los pedidos que contienen sus productos, y de cada uno **solo sus líneas** y su subtotal (`sellerSubtotal`): nunca lo que el comprador le compró a otros vendedores.
+- **Flujos alternativos:** pedido ajeno (comprador) o pedido sin productos del vendedor → `403`; un comprador filtrando por otro comprador → `403`; pedido inexistente → `404`.
+- **Endpoints:** `GET /api/orders`, `GET /api/orders/:id`, `GET /api/orders/buyer/:buyerId`
 
 ### CU-28 Cambiar el estado de un pedido (herramienta administrativa)
 - **Actor:** Administrador
@@ -455,3 +460,29 @@ flowchart LR
 - **Flujos alternativos:** fecha inválida o `from` posterior a `to` → `400`; `threshold` no entero o negativo → `400`; cualquier otro rol → `403`.
 - **Nota:** el reporte de ventas muestra **ingresos brutos**; los reembolsos se consultan en el reporte de devoluciones. El ticket promedio se redondea a centavos (antes, a enteros).
 - **Implementación:** los conteos y sumas se calculan en PostgreSQL con consultas agregadas (`GROUP BY`, `SUM`, `COUNT`); solo los nombres de producto y los vendedores se toman del catálogo.
+
+---
+
+## Listados para el frontend
+
+### CU-40 Listados paginados por rol
+- **Actor:** según el listado (ver tabla).
+- **Flujo principal:** el actor pide un listado con filtros opcionales y `?page=` / `?pageSize=`; el sistema aplica la visibilidad de su rol y responde `200` con `{ items, page, pageSize, total, totalPages }`.
+- **Flujos alternativos:** `page` menor que 1, `pageSize` mayor que 100, filtro con un valor fuera del catálogo o fecha inválida → `400`; rol sin acceso → `403`.
+
+| Endpoint | Quién y qué ve | Filtros |
+|---|---|---|
+| `GET /api/users` | Supervisor y administrador: todos | `role`, `status`, `search` (nombre, correo o documento) |
+| `GET /api/products` | Ver CU-17 | `search`, `type`, `sellerId`, `minPrice`, `maxPrice`, `status`, `sort` |
+| `GET /api/warehouses` | Operador logístico, supervisor, administrador: todas | `type`, `sellerId` |
+| `GET /api/inventory` | Vendedor: sus bodegas; operador, supervisor, administrador: todo | `productId`, `warehouseId` |
+| `GET /api/orders` | Ver CU-27 | `status`, `buyerId`, `from`, `to` |
+| `GET /api/invoices` | Comprador: las suyas; supervisor y administrador: todas | — |
+| `GET /api/shipments` | Operador logístico, supervisor, administrador: todos | `status` |
+| `GET /api/returns` | Comprador: las de sus pedidos; vendedor: las de sus productos (para procesarlas); supervisor y administrador: todas | `status` |
+| `GET /api/refunds` | Comprador: los suyos; supervisor y administrador: todos | `status` |
+
+### CU-41 Llamar a la API desde el navegador (CORS)
+- **Actor:** el frontend web.
+- **Flujo principal:** el navegador envía la petición de verificación previa (*preflight*); si el origen está en `CORS_ORIGIN`, la API responde con `Access-Control-Allow-Origin` y permite los headers `Authorization` y `Content-Type`.
+- **Flujos alternativos:** un origen no configurado no recibe el header y el navegador bloquea la petición.

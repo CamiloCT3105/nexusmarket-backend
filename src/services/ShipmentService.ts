@@ -5,6 +5,7 @@ import { ShipmentRepository } from "../repositories/ShipmentRepository";
 import { OrderService } from "./OrderService";
 import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
 import { transaction } from "../db/transaction";
+import { Page, PageRequest } from "../utils/pagination";
 
 // Ciclo de vida válido del envío. DELIVERED es estado final.
 const allowedTransitions: Record<ShipmentStatus, ShipmentStatus[]> = {
@@ -63,6 +64,10 @@ export const ShipmentService = {
       throw new NotFoundError("No existe un envío para este pedido.");
     }
     return shipment;
+  },
+
+  async listShipmentsPage(filter: { status?: ShipmentStatus | undefined }, request: PageRequest): Promise<Page<Shipment>> {
+    return ShipmentRepository.findPage(filter, request);
   },
 
   async listShipments(): Promise<Shipment[]> {

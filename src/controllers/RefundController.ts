@@ -8,6 +8,7 @@ import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
 import { ForbiddenError } from "../errors/AppError";
 import { requireParam } from "../utils/params";
+import { optionalEnum, pageRequest } from "../utils/query";
 
 // Un BUYER solo ve sus reembolsos. Para saberlo hay que seguir la cadena:
 // reembolso -> devolución -> pedido -> comprador
@@ -21,6 +22,16 @@ async function assertRefundAccess(authUser: AuthUser, refund: Refund): Promise<v
 }
 
 export const RefundController = {
+  // GET /api/refunds?status=&page=&pageSize=  (el comprador ve solo los suyos)
+  async list(req: Request, res: Response): Promise<void> {
+    const page = await RefundService.listRefundsForViewer(
+      getAuthUser(res),
+      { status: optionalEnum(req, "status", Object.values(RefundStatus)) },
+      pageRequest(req)
+    );
+    res.status(200).json(page);
+  },
+
   async getById(req: Request, res: Response): Promise<void> {
     const refund = await RefundService.getRefundById(requireParam(req, "id"));
     await assertRefundAccess(getAuthUser(res), refund);

@@ -2,6 +2,7 @@ import { Refund, RefundStatus } from "../models/Refund";
 import { db } from "../db/transaction";
 import { Prisma } from "../generated/prisma/client";
 import { isUuid } from "../db/ids";
+import { Page, PageRequest, skipTake, toPage } from "../utils/pagination";
 
 // PostgreSQL: tabla refunds. return_id es UNIQUE: un reembolso por devolución.
 
@@ -17,7 +18,24 @@ function toRefund(row: RefundRow): Refund {
   };
 }
 
+export type RefundFilter = {
+  status?: RefundStatus | undefined;
+  buyerId?: string | undefined; // reembolso → devolución → pedido → comprador
+};
+
 export const RefundRepository = {
+  async findPage(filter: RefundFilter, request: PageRequest): Promise<Page<Refund>> {
+    const where: Prisma.RefundWhereInput = {
+      ...(filter.status ? { status: filter.status } : {}),
+      ...(filter.buyerId ? { returnRequest: { order: { buyerId: filter.buyerId } } } : {}),
+    };
+    const [rows, total] = await Promise.all([
+      db().refund.findMany({ where, orderBy: { createdAt: "desc" }, ...skipTake(request) }),
+      db().refund.count({ where }),
+    ]);
+    return toPage(rows.map(toRefund), total, request);
+  },
+
   async findById(id: string): Promise<Refund | undefined> {
     if (!isUuid(id)) return undefined;
     const row = await db().refund.findUnique({ where: { id } });

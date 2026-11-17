@@ -3,6 +3,8 @@ import { Warehouse, WarehouseType } from "../models/Warehouse";
 import { WarehouseRepository } from "../repositories/WarehouseRepository";
 import { SellerService } from "./SellerService";
 import { NotFoundError, ValidationError } from "../errors/AppError";
+import { WarehouseFilter } from "../repositories/WarehouseRepository";
+import { Page, PageRequest } from "../utils/pagination";
 
 type CreateWarehouseInput = {
   type: WarehouseType;
@@ -43,6 +45,11 @@ export const WarehouseService = {
     };
 
     return WarehouseRepository.create(newWarehouse);
+  },
+
+  // Listado para administrador, supervisor y operador logístico (los vendedores usan /seller/:sellerId)
+  async listWarehousesPage(filter: WarehouseFilter, request: PageRequest): Promise<Page<Warehouse>> {
+    return WarehouseRepository.findPage(filter, request);
   },
 
   async getWarehouseById(id: string): Promise<Warehouse> {

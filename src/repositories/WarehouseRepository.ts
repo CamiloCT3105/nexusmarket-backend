@@ -3,6 +3,7 @@ import { db } from "../db/transaction";
 import { Prisma } from "../generated/prisma/client";
 import { isRecordNotFound } from "../db/prismaErrors";
 import { isUuid } from "../db/ids";
+import { Page, PageRequest, skipTake, toPage } from "../utils/pagination";
 
 // PostgreSQL: tabla warehouses
 
@@ -18,7 +19,22 @@ function toWarehouse(row: WarehouseRow): Warehouse {
   };
 }
 
+export type WarehouseFilter = { type?: WarehouseType | undefined; sellerId?: string | undefined };
+
 export const WarehouseRepository = {
+  async findPage(filter: WarehouseFilter, request: PageRequest): Promise<Page<Warehouse>> {
+    if (filter.sellerId !== undefined && !isUuid(filter.sellerId)) return toPage([], 0, request);
+    const where: Prisma.WarehouseWhereInput = {
+      ...(filter.type ? { type: filter.type } : {}),
+      ...(filter.sellerId ? { sellerId: filter.sellerId } : {}),
+    };
+    const [rows, total] = await Promise.all([
+      db().warehouse.findMany({ where, orderBy: [{ location: "asc" }, { id: "asc" }], ...skipTake(request) }),
+      db().warehouse.count({ where }),
+    ]);
+    return toPage(rows.map(toWarehouse), total, request);
+  },
+
   async findAll(): Promise<Warehouse[]> {
     const rows = await db().warehouse.findMany({ orderBy: { location: "asc" } });
     return rows.map(toWarehouse);

@@ -262,6 +262,13 @@ Probado con peticiones simultáneas reales: 5 checkouts de 3 unidades sobre un s
 | D-50 | **Precio en `Decimal128`** y máximo dos decimales validados. | Mismo criterio que D-34 en PostgreSQL: el dinero no se guarda como punto flotante. | `Number` (double). |
 | D-51 | **Carrito con operaciones atómicas de MongoDB** en lugar de leer, modificar y reescribir el documento. | Dos "agregar al carrito" simultáneos sumaban mal (uno pisaba al otro). Probado con 10 agregados simultáneos: una línea con cantidad 10. | Reescribir la lista completa de ítems. |
 | D-52 | **Carritos que expiran a los 30 días sin cambios** (índice TTL sobre `updatedAt`). | MongoDB limpia solo los carritos abandonados, sin tareas programadas. | Guardarlos para siempre o limpiarlos con un cron. |
+| D-53 | **Documento de identidad único** (`users.document_number`), normalizado (sin espacios ni puntos, en mayúsculas). | Validación crítica de la sección 11 de la especificación, que faltaba. `1.020.304` y `1020304` son la misma persona. | Guardarlo tal como llega. |
+| D-54 | **Migración escrita a mano en tres pasos** (columna opcional → valor temporal único → obligatoria y única). | Prisma no puede agregar una columna obligatoria a una tabla con filas. El valor `PENDIENTE-<id>` es único y fácil de detectar. | Borrar los datos existentes. |
+| D-55 | **Correos en minúsculas** al registrar y **búsqueda sin distinguir mayúsculas**. | El login del frontend no debe fallar por una mayúscula; la búsqueda insensible también encuentra correos guardados antes del cambio. | Columna `citext`. |
+| D-56 | **CORS por variable de entorno** (`CORS_ORIGIN`), sin credenciales. | El frontend corre en otro origen; el token viaja en `Authorization`, no en cookies. | Permitir cualquier origen (`*`). |
+| D-57 | **Formato de página común** `{ items, page, pageSize, total, totalPages }`, `pageSize` máximo 100. | Un solo componente de tabla en el frontend; el máximo evita respuestas gigantes. | Paginación por cursor. |
+| D-58 | **Visibilidad por rol dentro del servicio** en catálogo, pedidos, devoluciones, reembolsos, facturas e inventario. | La ruta decide quién entra; el servicio decide qué ve cada uno (por ejemplo, el vendedor solo sus líneas de un pedido). | Un endpoint distinto por rol. |
+| D-59 | **Pruebas e2e en el repositorio** (`npm test`) contra bases de prueba aisladas (`nexusmarket_e2e`). | Las pruebas escritas durante la migración vivían en una carpeta temporal; ahora protegen cada cambio. El runner se niega a vaciar una base cuyo nombre no indique que es de prueba. | Jest/Vitest con mocks (no prueba la concurrencia real). |
 
 ## 8. Limitaciones conocidas
 
@@ -273,7 +280,7 @@ Se documentan de forma honesta para que no se confundan con funcionalidades:
 - **Los productos digitales también pasan por inventario**, aunque conceptualmente no tienen stock físico.
 - **Toda unidad devuelta vuelve al stock disponible**; no se distingue si regresó defectuosa.
 - **`PATCH /orders/:id/status` (solo ADMIN) puede desincronizar** un pedido respecto de su envío; es una herramienta administrativa.
-- **Validación de entrada limitada**: no se verifica que los valores de enums enviados en el body (`status`, `type`, `commercialStatus`…) pertenezcan al enum, ni se usa una librería de validación.
-- **Los correos no se normalizan** (mayúsculas y minúsculas cuentan como distintos).
-- **Sin límite de intentos de login**, sin paginación y sin pruebas automatizadas.
+- **Validación de entrada hecha a mano** en los servicios (formatos, enums, cantidades), sin una librería de esquemas.
+- **Sin límite de intentos de login**.
+- **Los usuarios creados antes del documento de identidad** quedan con un valor temporal `PENDIENTE-<id>`; solo el administrador sembrado lo reemplaza (con `ADMIN_DOCUMENT_NUMBER`). No hay endpoint para cambiar el documento.
 - **El dinero se maneja como `number`** (punto flotante); en producción conviene usar enteros en centavos.

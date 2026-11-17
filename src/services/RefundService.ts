@@ -2,6 +2,10 @@ import { randomUUID } from "crypto";
 import { Refund, RefundStatus } from "../models/Refund";
 import { RefundRepository } from "../repositories/RefundRepository";
 import { ConflictError, NotFoundError, ValidationError } from "../errors/AppError";
+import { RefundFilter } from "../repositories/RefundRepository";
+import { AuthUser } from "../models/AuthUser";
+import { UserRole } from "../models/User";
+import { Page, PageRequest } from "../utils/pagination";
 
 const allowedTransitions: Record<RefundStatus, RefundStatus[]> = {
   [RefundStatus.PENDING]: [RefundStatus.COMPLETED],
@@ -46,6 +50,16 @@ export const RefundService = {
       throw new NotFoundError("No existe un reembolso para esta devolución.");
     }
     return refund;
+  },
+
+  // El comprador ve solo los reembolsos de sus devoluciones; administrador y supervisor, todos
+  async listRefundsForViewer(
+    viewer: AuthUser,
+    filter: Pick<RefundFilter, "status">,
+    request: PageRequest
+  ): Promise<Page<Refund>> {
+    const buyerId = viewer.role === UserRole.BUYER ? viewer.id : undefined;
+    return RefundRepository.findPage({ ...filter, buyerId }, request);
   },
 
   async listRefunds(): Promise<Refund[]> {

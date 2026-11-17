@@ -6,6 +6,7 @@ import { WarehouseService } from "../services/WarehouseService";
 import { getAuthUser } from "../middlewares/authenticate";
 import { ForbiddenError } from "../errors/AppError";
 import { requireParam } from "../utils/params";
+import { optionalString, pageRequest } from "../utils/query";
 
 type StockMovementBody = {
   productId: string;
@@ -28,6 +29,16 @@ async function assertWarehouseAccess(
 }
 
 export const InventoryController = {
+  // GET /api/inventory?productId=&warehouseId=&page=&pageSize=  (el vendedor, solo sus bodegas)
+  async list(req: Request, res: Response): Promise<void> {
+    const page = await InventoryService.listInventoryForViewer(
+      getAuthUser(res),
+      { productId: optionalString(req, "productId"), warehouseId: optionalString(req, "warehouseId") },
+      pageRequest(req)
+    );
+    res.status(200).json(page);
+  },
+
   async registerInbound(req: Request, res: Response): Promise<void> {
     const { productId, warehouseId, quantity } = req.body as StockMovementBody;
     await assertWarehouseAccess(

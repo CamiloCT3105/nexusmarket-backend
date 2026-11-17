@@ -1,6 +1,8 @@
 import { InventoryItem } from "../models/Inventory";
 import { db } from "../db/transaction";
+import { Prisma } from "../generated/prisma/client";
 import { isUuid } from "../db/ids";
+import { Page, PageRequest, skipTake, toPage } from "../utils/pagination";
 
 // PostgreSQL: tabla inventory_items (existencias actuales por producto y bodega).
 //
@@ -15,7 +17,35 @@ const key = ({ productId, warehouseId }: ItemKey) => ({
   productId_warehouseId: { productId, warehouseId },
 });
 
+export type InventoryFilter = {
+  productId?: string | undefined;
+  warehouseId?: string | undefined;
+  warehouseIds?: string[] | undefined; // vendedor: solo sus bodegas
+};
+
 export const InventoryRepository = {
+  async findPage(filter: InventoryFilter, request: PageRequest): Promise<Page<InventoryItem>> {
+    if (filter.warehouseId !== undefined && !isUuid(filter.warehouseId)) return toPage([], 0, request);
+    const where: Prisma.InventoryItemWhereInput = {
+      ...(filter.productId ? { productId: filter.productId } : {}),
+      ...(filter.warehouseId ? { warehouseId: filter.warehouseId } : {}),
+      ...(filter.warehouseIds ? { warehouseId: { in: filter.warehouseIds } } : {}),
+    };
+    // Si se pidió una bodega concreta y además hay restricción por vendedor, deben cumplirse ambas
+    if (filter.warehouseId && filter.warehouseIds) {
+      where.warehouseId = filter.warehouseIds.includes(filter.warehouseId) ? filter.warehouseId : { in: [] };
+    }
+    const [rows, total] = await Promise.all([
+      db().inventoryItem.findMany({
+        where,
+        orderBy: [{ productId: "asc" }, { warehouseId: "asc" }],
+        ...skipTake(request),
+      }),
+      db().inventoryItem.count({ where }),
+    ]);
+    return toPage(rows, total, request);
+  },
+
   async findItem(productId: string, warehouseId: string): Promise<InventoryItem | undefined> {
     if (!isUuid(warehouseId)) return undefined;
     const row = await db().inventoryItem.findUnique({ where: key({ productId, warehouseId }) });

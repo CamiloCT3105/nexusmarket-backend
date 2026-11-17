@@ -80,6 +80,7 @@ Entregable
 | 15 | **Inventario y pedidos en PostgreSQL** con checkout transaccional | Es el núcleo del negocio y la parte más sensible a la concurrencia; se apoya en perfiles y bodegas ya migrados. |
 | 16 | **Facturas, envíos, devoluciones y reembolsos en PostgreSQL**; **reportes con SQL** | Cierra la parte relacional: posventa depende de pedidos, y los reportes ya pueden agregar todo en la base de datos. |
 | 17 | **Catálogo, carritos y bitácora en MongoDB** | Termina la migración: ya no queda ningún repositorio en memoria. |
+| 18 | **Preparación para el frontend**: CORS, catálogo con filtros, listados paginados por rol, pruebas e2e en el repositorio y tres brechas con la especificación (documento de identidad, operador logístico en inventario, pedidos del vendedor) | Al comparar el PDF original con lo implementado aparecieron requisitos que faltaban; el frontend los necesita desde la primera pantalla. |
 
 ## 4. Resumen por módulo
 
@@ -131,6 +132,11 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 25 | Dos "agregar al carrito" simultáneos podían perder unidades (resuelto en el diseño) | El servicio leía el carrito, sumaba en Node y reescribía la lista: el segundo pisaba al primero. | Operaciones atómicas de MongoDB (`$inc` / `$push` con reintento); probado con 10 agregados simultáneos. |
 | 26 | Datos inválidos de producto terminarían en errores `500` de Mongoose (nombre vacío, precio como texto, tipo inexistente) | Los esquemas de MongoDB validan, pero sus errores no son errores de la aplicación. | Validar en `ProductService` antes de guardar → `400` con mensaje claro. |
 | 27 | La fila 24 de esta bitácora quedó partida en dos líneas (tabla rota en GitHub) | Al escribirla con un *heredoc* del shell, el `\n` del texto se convirtió en un salto de línea real. | Escribir los scripts de edición en archivos en lugar de *heredocs* y revisar el resultado con `cat -A`. |
+| 28 | Prisma no generaba la migración del documento de identidad, ni siquiera con `--create-only` | La tabla `users` tenía filas y la columna nueva es obligatoria. | Migración SQL escrita a mano en tres pasos (D-54), verificada con `prisma migrate diff` (sin diferencias con el esquema). |
+| 29 | El runner de pruebas no mostraba el resumen y quedaba esperando | Un proceso terminado con `kill()` tiene `exitCode` en `null` (se llena `signalCode`); se esperaba un evento que ya había ocurrido. | Revisar ambos campos antes de esperar la salida. |
+| 30 | Node 24 avisaba de un riesgo de seguridad al ejecutar `npx` con `shell: true` | Los argumentos se concatenan sin escapar. | Ejecutar `prisma` y `tsc` directamente con `node`, sin shell. |
+| 31 | Todas las suites fallaron con `401` tras agregar el documento de identidad | El servidor de pruebas ya no sembraba al administrador: faltaba `ADMIN_DOCUMENT_NUMBER` en el runner. | Pasar la variable; la falla en cascada confirmó que sin documento no se crea el administrador. |
+| 32 | `Module "mongoose" has no exported member 'FilterQuery'` | Mongoose 9 renombró el tipo. | Usar `QueryFilter`. |
 
 ## 6. Aprendizajes sobre trabajar con IA
 
@@ -143,6 +149,7 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 ## 7. Próximos pasos
 
 1. ~~Migración a base de datos~~ ✅ completada: PostgreSQL + MongoDB (ver `SDD/02`, sección 6.1).
-2. **Validación de entradas** con una librería (por ejemplo, `zod`) y validación de enums en el body.
-3. **Pruebas automatizadas** de servicios y de rutas.
+2. **Validación de entradas** con una librería (por ejemplo, `zod`).
+3. ~~Pruebas automatizadas~~ ✅ `npm test` (e2e).
+4. **Productos digitales** con entrega inmediata tras el pago.
 4. **Frontend en React + TypeScript**, en un repositorio separado, consumiendo esta API.

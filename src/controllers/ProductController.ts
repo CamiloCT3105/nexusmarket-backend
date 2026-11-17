@@ -6,6 +6,8 @@ import { UserRole } from "../models/User";
 import { getAuthUser } from "../middlewares/authenticate";
 import { ForbiddenError } from "../errors/AppError";
 import { requireParam } from "../utils/params";
+import { optionalEnum, optionalNumber, optionalString, pageRequest } from "../utils/query";
+import { ProductSort } from "../repositories/ProductRepository";
 
 // ADMIN puede gestionar cualquier producto; un SELLER solo los suyos
 function canManageProduct(authUser: AuthUser, product: Product): boolean {
@@ -20,7 +22,27 @@ async function getManageableProduct(req: Request, res: Response): Promise<Produc
   return product;
 }
 
+const PRODUCT_SORTS: ProductSort[] = ["newest", "price_asc", "price_desc", "name_asc"];
+
 export const ProductController = {
+  // GET /api/products?search=&type=&sellerId=&minPrice=&maxPrice=&status=&sort=&page=&pageSize=
+  async list(req: Request, res: Response): Promise<void> {
+    const page = await ProductService.searchCatalog(
+      getAuthUser(res),
+      {
+        search: optionalString(req, "search"),
+        type: optionalEnum(req, "type", Object.values(ProductType)),
+        sellerId: optionalString(req, "sellerId"),
+        minPrice: optionalNumber(req, "minPrice", { min: 0 }),
+        maxPrice: optionalNumber(req, "maxPrice", { min: 0 }),
+        status: optionalEnum(req, "status", Object.values(ProductStatus)),
+      },
+      optionalEnum(req, "sort", PRODUCT_SORTS) ?? "newest",
+      pageRequest(req)
+    );
+    res.status(200).json(page);
+  },
+
   async create(req: Request, res: Response): Promise<void> {
     const authUser = getAuthUser(res);
     const { name, description, price, type } = req.body as {

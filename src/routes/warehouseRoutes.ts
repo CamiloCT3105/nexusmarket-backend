@@ -17,6 +17,7 @@ router.get(
   authorize(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.LOGISTICS_OPERATOR, UserRole.SELLER),
   WarehouseController.getById
 );
+router.get("/", authorize(UserRole.ADMIN, UserRole.SUPERVISOR, UserRole.LOGISTICS_OPERATOR), WarehouseController.list);
 router.patch("/:id/link-seller", authorize(UserRole.ADMIN), WarehouseController.linkToSeller);
 
 export default router;

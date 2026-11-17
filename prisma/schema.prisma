@@ -71,9 +71,10 @@ enum RefundStatus {
 // ─── Usuarios y perfiles ───────────────────────────────────────────────────────
 
 model User {
-  id        String     @id @db.Uuid
-  fullName  String     @map("full_name")
-  email     String     @unique
+  id             String     @id @db.Uuid
+  fullName       String     @map("full_name")
+  email          String     @unique
+  documentNumber String     @unique @map("document_number") // documento de identidad (sección 11)
   role      UserRole
   status    UserStatus @default(ACTIVE)
   createdAt DateTime   @default(now()) @map("created_at")

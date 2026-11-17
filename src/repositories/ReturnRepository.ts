@@ -2,6 +2,7 @@ import { ReturnRequest, ReturnStatus } from "../models/ReturnRequest";
 import { db } from "../db/transaction";
 import { Prisma } from "../generated/prisma/client";
 import { isUuid } from "../db/ids";
+import { Page, PageRequest, skipTake, toPage } from "../utils/pagination";
 
 // PostgreSQL: tabla return_requests
 
@@ -19,7 +20,26 @@ function toReturn(row: ReturnRow): ReturnRequest {
   };
 }
 
+export type ReturnFilter = {
+  status?: ReturnStatus | undefined;
+  buyerId?: string | undefined; // devoluciones de pedidos de este comprador
+  productIds?: string[] | undefined; // devoluciones de estos productos (vendedor)
+};
+
 export const ReturnRepository = {
+  async findPage(filter: ReturnFilter, request: PageRequest): Promise<Page<ReturnRequest>> {
+    const where: Prisma.ReturnRequestWhereInput = {
+      ...(filter.status ? { status: filter.status } : {}),
+      ...(filter.buyerId ? { order: { buyerId: filter.buyerId } } : {}),
+      ...(filter.productIds ? { productId: { in: filter.productIds } } : {}),
+    };
+    const [rows, total] = await Promise.all([
+      db().returnRequest.findMany({ where, orderBy: { createdAt: "desc" }, ...skipTake(request) }),
+      db().returnRequest.count({ where }),
+    ]);
+    return toPage(rows.map(toReturn), total, request);
+  },
+
   async findById(id: string): Promise<ReturnRequest | undefined> {
     if (!isUuid(id)) return undefined;
     const row = await db().returnRequest.findUnique({ where: { id } });
