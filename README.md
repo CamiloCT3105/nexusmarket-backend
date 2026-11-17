@@ -32,11 +32,16 @@ Proyecto académico desarrollado con **desarrollo asistido por IA (vibe coding)*
 | `crypto` (`scrypt`) | Hash de contraseñas (incluido en Node) |
 | dotenv | Variables de entorno |
 | ts-node-dev | Recarga automática en desarrollo |
+| PostgreSQL 17 | Datos transaccionales (usuarios, inventario, pedidos, facturación, posventa) |
+| Prisma 7 | ORM y migraciones de PostgreSQL |
+| MongoDB 8 | Catálogo, carritos y bitácora de movimientos (en migración) |
+| Docker Compose | Levanta ambas bases de datos en desarrollo |
 
 ## Requisitos
 
 - Node.js 20 o superior
 - npm
+- Docker Desktop (para PostgreSQL y MongoDB)
 
 ## Instalación y ejecución
 
@@ -45,7 +50,7 @@ Proyecto académico desarrollado con **desarrollo asistido por IA (vibe coding)*
 git clone https://github.com/CamiloCT3105/nexusmarket-backend.git
 cd nexusmarket-backend
 
-# 2. Instalar dependencias
+# 2. Instalar dependencias (también genera el cliente de Prisma)
 npm install
 
 # 3. Crear el archivo de entorno a partir del ejemplo
@@ -54,13 +59,21 @@ cp .env.example .env        # en Windows (cmd): copy .env.example .env
 # 4. Generar un secreto para firmar los tokens y pegarlo en .env como JWT_SECRET
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
-# 5. Levantar el servidor en modo desarrollo
+# 5. Levantar PostgreSQL y MongoDB (con Docker Desktop abierto)
+npm run db:up
+
+# 6. Crear las tablas en PostgreSQL
+npm run db:migrate
+
+# 7. Levantar el servidor en modo desarrollo
 npm run dev
 ```
 
-Verifica que funciona abriendo `http://localhost:3000/health`, que debe responder `{ "status": "ok" }`.
+Verifica que funciona abriendo `http://localhost:3000/health`, que debe responder `{ "status": "ok" }`. Si PostgreSQL no está disponible, el servidor no arranca y lo indica en la consola.
 
-> Los datos viven **en memoria**: cada vez que reinicias el servidor se pierden. El único usuario que se recrea solo es el administrador (ver abajo).
+> **Migración en curso:** usuarios y credenciales ya viven en **PostgreSQL** y sobreviven a los reinicios. El resto de módulos todavía usa memoria y se pierde al reiniciar; se irán migrando uno por uno.
+
+MongoDB se publica en el puerto **27018** del equipo (no en el 27017 habitual) para no chocar con un MongoDB instalado localmente.
 
 ## Variables de entorno
 
@@ -72,6 +85,8 @@ Verifica que funciona abriendo `http://localhost:3000/health`, que debe responde
 | `JWT_EXPIRES_IN_SECONDS` | No | Duración del token en segundos. | `28800` (8 horas) |
 | `ADMIN_EMAIL` | Recomendada | Correo del administrador que se crea al arrancar. | — |
 | `ADMIN_PASSWORD` | Recomendada | Contraseña de ese administrador (mínimo 8 caracteres). | — |
+| `DATABASE_URL` | **Sí** | Conexión a PostgreSQL. Si falta, el servidor no arranca. | ver `.env.example` |
+| `MONGO_URL` | No (por ahora) | Conexión a MongoDB. | ver `.env.example` |
 
 Si `ADMIN_EMAIL` y `ADMIN_PASSWORD` no están definidos, no se crea ningún administrador y no habrá forma de crear vendedores ni otros roles.
 
@@ -82,27 +97,39 @@ Si `ADMIN_EMAIL` y `ADMIN_PASSWORD` no están definidos, no se crea ningún admi
 | Comando | Qué hace |
 |---|---|
 | `npm run dev` | Levanta el servidor con recarga automática. |
-| `npm run build` | Compila TypeScript a JavaScript en `dist/`. |
+| `npm run build` | Genera el cliente de Prisma y compila TypeScript a `dist/`. |
 | `npm start` | Ejecuta la versión compilada (`dist/index.js`). |
+| `npm run db:up` | Levanta PostgreSQL y MongoDB con Docker y espera a que estén listos. |
+| `npm run db:down` | Detiene los contenedores (los datos se conservan). Para borrarlos: `docker compose down -v`. |
+| `npm run db:migrate` | Crea o aplica migraciones en desarrollo (`prisma migrate dev`). |
+| `npm run db:deploy` | Aplica migraciones pendientes sin crear nuevas (producción). |
+| `npm run db:studio` | Abre Prisma Studio para ver y editar los datos en el navegador. |
 
 ## Estructura del proyecto
 
 ```
 nexusmarket-backend/
 ├── SDD/                     # Documentación y bitácora del desarrollo asistido por IA
+├── prisma/
+│   ├── schema.prisma        # Esquema relacional (PostgreSQL)
+│   └── migrations/          # Migraciones SQL versionadas
 ├── src/
 │   ├── config/              # Variables de entorno
 │   ├── controllers/         # Adaptan HTTP a los servicios; verifican propiedad del recurso
+│   ├── db/                  # Cliente de Prisma, transacciones y errores de base de datos
 │   ├── errors/              # Errores tipados (cada uno con su código HTTP)
 │   ├── middlewares/         # authenticate · authorize · ownerOrRoles · errorHandler
 │   ├── models/              # Interfaces y enums de cada entidad
-│   ├── repositories/        # Acceso a datos asíncrono (hoy, en memoria)
+│   ├── generated/           # Cliente de Prisma generado (no se sube a git)
+│   ├── repositories/        # Acceso a datos asíncrono (PostgreSQL o, mientras se migra, memoria)
 │   ├── routes/              # Endpoints y permisos por rol
 │   ├── services/            # Lógica de negocio
 │   ├── utils/               # Hash de contraseñas, JWT y lectura de parámetros
 │   ├── app.ts               # Configuración de Express
 │   └── index.ts             # Punto de entrada
 ├── .env.example
+├── docker-compose.yml       # PostgreSQL + MongoDB para desarrollo
+├── prisma.config.ts         # Configuración de la CLI de Prisma
 ├── LICENSE
 ├── package.json
 ├── tsconfig.json
@@ -335,7 +362,7 @@ Todo el detalle funcional y técnico está en [`SDD/`](./SDD):
 
 Este proyecto es una base funcional, no un sistema listo para producción:
 
-- Los datos viven **en memoria** y se pierden al reiniciar.
+- **Migración a base de datos en curso**: usuarios y credenciales están en PostgreSQL; el resto de módulos sigue en memoria y se pierde al reiniciar.
 - El **pago es simulado**: solo cambia el estado del pedido.
 - La **validación de entradas es limitada**: no se verifica que los valores de enums enviados en el body sean válidos.
 - **Sin límite de intentos de login**, sin paginación y sin pruebas automatizadas.
@@ -345,7 +372,10 @@ La lista completa está en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-li
 
 ## Próximos pasos
 
-- [ ] Base de datos real (solo cambia la capa `repositories`)
+- [x] Infraestructura de bases de datos (Docker, PostgreSQL + Prisma, esquema y migración inicial)
+- [x] Usuarios y credenciales en PostgreSQL
+- [ ] Resto de módulos SQL en PostgreSQL (perfiles, bodegas, inventario, pedidos, posventa) con transacciones
+- [ ] Catálogo, carritos y movimientos de inventario en MongoDB
 - [ ] Validación de entradas con una librería (por ejemplo, `zod`)
 - [ ] Pruebas automatizadas
 - [ ] Frontend en React + TypeScript (repositorio separado)

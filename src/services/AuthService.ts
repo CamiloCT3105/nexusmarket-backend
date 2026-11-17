@@ -4,6 +4,7 @@ import { UserService } from "./UserService";
 import { hashPassword, verifyPassword } from "../utils/password";
 import { signToken } from "../utils/jwt";
 import { env } from "../config/env";
+import { transaction } from "../db/transaction";
 import { ForbiddenError, UnauthorizedError, ValidationError } from "../errors/AppError";
 
 type RegisterUserInput = {
@@ -25,18 +26,19 @@ export const AuthService = {
       );
     }
 
-    const user = await UserService.createUser({
-      fullName: input.fullName,
-      email: input.email,
-      role: input.role,
-    });
+    const passwordHash = hashPassword(input.password);
 
-    await CredentialRepository.create({
-      userId: user.id,
-      passwordHash: hashPassword(input.password),
-    });
+    // Usuario y credencial se guardan juntos: si falla uno, no queda ninguno
+    return transaction(async () => {
+      const user = await UserService.createUser({
+        fullName: input.fullName,
+        email: input.email,
+        role: input.role,
+      });
 
-    return user;
+      await CredentialRepository.create({ userId: user.id, passwordHash });
+      return user;
+    });
   },
 
   // El registro público SIEMPRE crea compradores: nadie puede auto-asignarse otro rol

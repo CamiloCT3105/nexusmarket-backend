@@ -1,16 +1,14 @@
 import { Credential } from "../models/Credential";
-import { clone } from "./clone";
+import { db } from "../db/transaction";
 
-const credentials: Credential[] = [];
-
+// PostgreSQL (tabla credentials), separada de users a propósito (D-12)
 export const CredentialRepository = {
   async findByUserId(userId: string): Promise<Credential | undefined> {
-    const credential = credentials.find((c) => c.userId === userId);
-    return credential && clone(credential);
+    const row = await db().credential.findUnique({ where: { userId } });
+    return row ?? undefined;
   },
 
   async create(credential: Credential): Promise<Credential> {
-    credentials.push(clone(credential));
-    return clone(credential);
+    return db().credential.create({ data: credential });
   },
 };

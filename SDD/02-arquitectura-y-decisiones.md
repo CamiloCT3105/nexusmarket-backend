@@ -4,7 +4,7 @@
 
 ## 1. Visión general
 
-NexusMarket Backend es una API REST construida con **Node.js, TypeScript y Express 5**, organizada por capas. Hoy los datos viven **en memoria** (se pierden al reiniciar); la arquitectura está pensada para reemplazar esa capa por una base de datos real sin tocar la lógica de negocio.
+NexusMarket Backend es una API REST construida con **Node.js, TypeScript y Express 5**, organizada por capas. Los datos se están migrando, módulo por módulo, de memoria a dos bases de datos: **PostgreSQL** para lo transaccional y **MongoDB** para lo flexible (ver sección 6.1). Solo cambia la capa de repositorios; la lógica de negocio no se toca.
 
 ## 2. Arquitectura por capas
 
@@ -26,7 +26,7 @@ controllers ────── traduce HTTP → llamada al servicio; valida par�
 services ───────── lógica de negocio y reglas; coordina otros servicios;
   │                lanza errores tipados (ValidationError, NotFoundError…)
   ▼
-repositories ───── acceso a datos asíncrono (hoy arrays en memoria)
+repositories ───── acceso a datos asíncrono (PostgreSQL vía Prisma; memoria mientras se migra)
 
 errorHandler ───── middleware final: convierte cualquier error en la respuesta HTTP
 ```
@@ -169,6 +169,26 @@ stateDiagram-v2
 | `ReturnRequest` | `id` | pertenece a un `Order` y a un producto |
 | `Refund` | `id` | 1 a 1 con `ReturnRequest` |
 
+### 6.1 Persistencia: qué va en cada base de datos
+
+| Base de datos | Entidades | Por qué | Estado |
+|---|---|---|---|
+| **PostgreSQL** (Prisma) | `User`, `Credential` | Integridad y unicidad del correo. | ✅ Migrado |
+| **PostgreSQL** (Prisma) | `Buyer`, `Seller`, `Warehouse`, `InventoryItem`, `Order`, `Invoice`, `Shipment`, `ReturnRequest`, `Refund` | Dinero, máquinas de estado y relaciones fuertes; el checkout y las devoluciones necesitan **transacciones** y bloqueo de filas de inventario. Los reportes se resuelven con `GROUP BY`. | Esquema creado; repositorios pendientes |
+| **MongoDB** (Mongoose) | `Product` | Catálogo flexible: variantes y atributos distintos según el tipo de producto. | Pendiente |
+| **MongoDB** (Mongoose) | `Cart` | Un documento por comprador, de escritura frecuente y vida corta (puede expirar con índice TTL). | Pendiente |
+| **MongoDB** (Mongoose) | `InventoryMovement` | Bitácora que solo crece. | Pendiente |
+
+Las tablas SQL que referencian productos (`inventory_items`, `order_items`, `return_requests`) guardan `product_id` como texto **sin llave foránea**, porque el producto vive en otra base de datos. Por eso la integridad de esa referencia la valida el servicio (`ProductService.getProductById`).
+
+Esquema: [`prisma/schema.prisma`](../prisma/schema.prisma). Migraciones: `prisma/migrations/`.
+
+#### Transacciones
+
+`src/db/transaction.ts` ofrece una **unidad de trabajo**: un servicio envuelve varias operaciones en `transaction(async () => { ... })`, y todos los repositorios SQL que se ejecuten dentro usan la misma transacción. El cliente activo se encuentra solo (`db()`, mediante `AsyncLocalStorage`), así que no hay que pasarlo de función en función ni cambiar las firmas de los repositorios. Si algo lanza un error, se deshace todo. Una transacción anidada reutiliza la exterior.
+
+Hoy lo usa `AuthService.registerUser` (usuario + credencial). Se usará en el checkout, el pago, el envío y la aprobación de devoluciones al migrar esos módulos.
+
 ## 7. Registro de decisiones
 
 | # | Decisión | Motivo | Alternativa descartada |
@@ -179,7 +199,7 @@ stateDiagram-v2
 | D-04 | **TypeScript 5.x**, no 7. | `ts-node-dev` aún no es compatible con TypeScript 7 (falla al leer la configuración). | TypeScript 7. |
 | D-05 | Configuración estricta: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`. | Obliga a manejar `undefined` y propiedades opcionales de forma explícita. | Configuración permisiva. |
 | D-06 | **Arquitectura por capas** (modelo → repositorio → servicio → controller → ruta). | Separa responsabilidades y permite cambiar el almacenamiento sin tocar la lógica. | Todo en los controllers. |
-| D-07 | **Repositorios en memoria** (temporal). | La especificación no define almacenamiento; permite avanzar en la lógica sin decidir la base de datos aún. | Conectar una base de datos desde el inicio. |
+| D-07 | **Repositorios en memoria** (temporal; se reemplazan desde D-29). | La especificación no define almacenamiento; permite avanzar en la lógica sin decidir la base de datos aún. | Conectar una base de datos desde el inicio. |
 | D-08 | Un servicio solo llama a **otros servicios**, no a repositorios ajenos. | Mantiene las reglas de cada módulo en un único lugar. | Acceso directo entre capas. |
 | D-09 | **Referencias por id**, sin duplicar datos (`Buyer` y `Seller` apuntan a `User` con `userId`). | Evita inconsistencias: el correo vive en un solo lugar. | Copiar los campos de `User` en `Buyer`/`Seller`. |
 | D-10 | **Instantáneas de precio**: `OrderItem.unitPrice` e `Invoice.amount` se copian al crearse. | Los pedidos y facturas ya emitidos no deben cambiar si el precio del producto cambia después. | Leer siempre el precio actual. |
@@ -201,12 +221,19 @@ stateDiagram-v2
 | D-26 | **Errores tipados + middleware central** en lugar de `try/catch` con códigos fijos en cada controller. | Antes, un mismo error podía responder `400` o `404` según el controller. Ahora el código lo decide el tipo de error, en un solo lugar, y los fallos inesperados responden `500` sin filtrar detalles. | Mantener `try/catch` por controller. |
 | D-27 | **`404` para recursos inexistentes y `409` para duplicados** en todos los endpoints. | Códigos coherentes en toda la API. Antes varios endpoints respondían `400` en ambos casos. | Responder siempre `400`. |
 | D-28 | **Login de cuenta bloqueada responde `403`** (antes `401`). | Las credenciales son correctas: el problema es de permiso, igual que en `authenticate`. | Mantener `401`. |
+| D-29 | **Persistencia políglota**: PostgreSQL para lo transaccional, MongoDB para catálogo, carritos y bitácora (sección 6.1). | Cada dato en el motor que mejor encaja con su forma y su forma de uso. | Una sola base de datos para todo. |
+| D-30 | **Prisma 7.10.1** como ORM de PostgreSQL, con versión exacta. | Tipos generados a partir del esquema y migraciones versionadas. El tag `latest` de npm apuntaba a una *release candidate* de Prisma 8; se fija la última estable (lección de D-04). | TypeORM, Drizzle, SQL a mano. |
+| D-31 | **Docker Compose** para las bases de datos de desarrollo. | Mismo entorno en cualquier equipo con un comando (`npm run db:up`). MongoDB se publica en el puerto 27018 para no chocar con instalaciones locales. | Instalar PostgreSQL y MongoDB en el equipo. |
+| D-32 | **Unidad de trabajo con `AsyncLocalStorage`** (`transaction()` / `db()`). | Los servicios agrupan operaciones atómicas sin conocer Prisma ni cambiar la firma de los repositorios. | Pasar el cliente de transacción como parámetro a cada repositorio. |
+| D-33 | **Migración incremental**, módulo por módulo, empezando por usuarios y credenciales. | Cada paso se prueba de punta a punta antes de seguir; los módulos en memoria y en PostgreSQL conviven. | Migrar todo de una vez. |
+| D-34 | **Dinero como `DECIMAL(12,2)`** en PostgreSQL. | Evita los errores de redondeo del punto flotante. Los repositorios lo convierten a `number` para no cambiar los modelos de dominio. | Enteros en centavos (habría cambiado toda la API). |
+| D-35 | **La restricción `UNIQUE` de la base de datos es la última defensa** contra duplicados; su violación (Prisma `P2002`) se responde como `409`. | El chequeo previo del servicio no basta si dos peticiones llegan a la vez. | Confiar solo en el chequeo del servicio. |
 
 ## 8. Limitaciones conocidas
 
 Se documentan de forma honesta para que no se confundan con funcionalidades:
 
-- **Los datos viven en memoria**: se pierden al reiniciar el servidor.
+- **Migración a base de datos incompleta**: solo usuarios y credenciales están en PostgreSQL; el resto de módulos sigue en memoria y se pierde al reiniciar. Mientras tanto puede quedar, por ejemplo, un perfil de comprador en memoria que apunta a un usuario persistido.
 - **El pago es simulado**: solo cambia el estado del pedido.
 - **Los productos digitales también pasan por inventario**, aunque conceptualmente no tienen stock físico.
 - **Toda unidad devuelta vuelve al stock disponible**; no se distingue si regresó defectuosa.

@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Cliente de Prisma generado (se regenera con `npx prisma generate` / postinstall)
+src/generated/

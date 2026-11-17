@@ -75,6 +75,7 @@ Entregable
 | 10 | **Reportes** | Consolida información de todos los módulos (OBJ-12). |
 | 11 | **Documentación** (`README` y `SDD/`) | Deja el proyecto entendible sin leer el código. |
 | 12 | **Capas asíncronas y manejo central de errores** | Primer paso hacia la base de datos (PostgreSQL + MongoDB): se cambia la firma de todas las capas sin cambiar el almacenamiento todavía. |
+| 13 | **Infraestructura de bases de datos** (Docker, Prisma, esquema SQL, transacciones) y **usuarios + credenciales en PostgreSQL** | Usuarios es el módulo del que dependen todos los demás, igual que en la fase 1. |
 
 ## 4. Resumen por módulo
 
@@ -110,6 +111,10 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 9 | `req.user` no tipado (evitado en el diseño) | Ampliar `Request` con declaraciones globales no funciona bien con `ts-node-dev`. | Pasar el usuario autenticado por `res.locals`. |
 | 10 | `WarehouseService.linkToSeller` no guardaba el vendedor de la bodega (encontrado al pasar a `async`) | Mutaba el objeto devuelto por el repositorio sin llamar a `update()`; funcionaba solo porque el array en memoria devolvía la referencia. Con una base de datos el cambio se habría perdido. | Agregar `WarehouseRepository.update` y hacer que los repositorios devuelvan copias, para que este tipo de error aparezca ya. |
 | 11 | Códigos HTTP incoherentes: "producto inexistente" respondía `404` en un endpoint y `400` en otro | Cada controller elegía el código en su propio `catch`, sin saber qué tipo de error había ocurrido. | Errores tipados en los servicios y un middleware central (`errorHandler`). |
+| 12 | `npm view prisma version` devolvía `8.0.0-rc.34` | El tag `latest` de Prisma apuntaba a una *release candidate*. | Instalar la última estable con versión exacta: `prisma@7.10.1 --save-exact`. |
+| 13 | El puerto 27017 ya estaba ocupado | Hay un `mongod` instalado en el equipo. | Publicar el MongoDB de Docker en el puerto 27018. |
+| 14 | `Expected 0-1 arguments, but got 2` en `new Error(msg, { cause })` | La opción `cause` es de ES2022 y el proyecto compila a ES2020. | Incluir el detalle del error original en el mensaje. |
+| 15 | Riesgo de usuario sin credencial (evitado en el diseño) | El registro hace dos escrituras; si la segunda falla, la primera quedaba guardada. | Envolver ambas en `transaction()`; probado con cuatro registros simultáneos del mismo correo (uno `201`, tres `409`, ningún huérfano). |
 
 ## 6. Aprendizajes sobre trabajar con IA
 
@@ -121,7 +126,7 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 
 ## 7. Próximos pasos
 
-1. **Base de datos real**, reemplazando los arrays en memoria: solo cambia la capa `repositories` (ya asíncrona). Plan: **PostgreSQL** (Prisma) para usuarios, bodegas, inventario, pedidos, facturas, envíos, devoluciones y reembolsos; **MongoDB** (Mongoose) para el catálogo de productos, los carritos y la bitácora de movimientos.
+1. **Terminar la migración a base de datos** (usuarios y credenciales ya están en PostgreSQL): perfiles y bodegas; inventario, pedidos y posventa con transacciones; después catálogo, carritos y bitácora en **MongoDB** (Mongoose). Ver `SDD/02`, sección 6.1.
 2. **Validación de entradas** con una librería (por ejemplo, `zod`) y validación de enums en el body.
 3. **Pruebas automatizadas** de servicios y de rutas.
 4. **Frontend en React + TypeScript**, en un repositorio separado, consumiendo esta API.
