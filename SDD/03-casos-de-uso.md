@@ -124,22 +124,22 @@ flowchart LR
   2. El sistema toma el `userId` **del token** (no del cuerpo).
   3. El sistema valida que el usuario tenga rol `BUYER` y que no tenga ya un perfil.
   4. El sistema crea el perfil con estado comercial `ACTIVE` y sin direcciones adicionales; responde `201`.
-- **Flujos alternativos:** ya tiene perfil → `409`; el rol no es `BUYER` → `403`.
+- **Flujos alternativos:** falta la dirección o alguno de sus campos (`street`, `city`, `country`, `postalCode`) → `400` indicando cuáles; ya tiene perfil → `409`; el rol no es `BUYER` → `403`.
 - **Postcondiciones:** el usuario puede usar carrito y pedidos.
 - **Endpoint:** `POST /api/buyers`
 
 ### CU-08 Agregar dirección adicional
 - **Actor:** Comprador (solo sobre su propio perfil)
 - **Precondiciones:** perfil de comprador existente.
-- **Flujo principal:** el comprador envía una dirección (calle, ciudad, país, código postal); el sistema la agrega a sus direcciones adicionales y responde `200`.
-- **Flujos alternativos:** el perfil no es del usuario autenticado → `403`; el perfil no existe → `404`.
+- **Flujo principal:** el comprador envía una dirección (calle, ciudad, país, código postal); el sistema la agrega **al final** de sus direcciones adicionales (se conserva el orden) y responde `200`.
+- **Flujos alternativos:** dirección incompleta → `400`; el perfil no es del usuario autenticado → `403`; el perfil no existe → `404`.
 - **Endpoint:** `PATCH /api/buyers/:userId/addresses`
 
 ### CU-09 Actualizar el estado comercial de un comprador
 - **Actor:** Administrador
 - **Precondiciones:** perfil de comprador existente.
 - **Flujo principal:** el administrador envía el nuevo estado comercial (`ACTIVE` o `RESTRICTED`); el sistema lo actualiza y responde `200`.
-- **Flujos alternativos:** no es administrador → `403`; perfil inexistente → `404`.
+- **Flujos alternativos:** estado distinto de `ACTIVE`/`RESTRICTED` → `400`; no es administrador → `403`; perfil inexistente → `404`.
 - **Endpoint:** `PATCH /api/buyers/:userId/commercial-status`
 
 > Consultar un perfil de comprador (`GET /api/buyers/:userId`) está permitido al propio comprador, al administrador y al supervisor.
@@ -162,9 +162,10 @@ flowchart LR
 
 ### CU-11 Asignar una bodega al perfil de un vendedor
 - **Actor:** Administrador
-- **Precondiciones:** perfil de vendedor existente.
-- **Flujo principal:** el administrador envía el id de la bodega; el sistema lo agrega a la lista de bodegas del vendedor y responde `200`.
-- **Nota:** este caso de uso **no valida** que la bodega exista. La forma recomendada de vincular es CU-13, que valida y mantiene consistentes ambos lados.
+- **Precondiciones:** perfil de vendedor existente; la bodega existe y es de tipo `SELLER`.
+- **Flujo principal:** el administrador envía el id de la bodega; el sistema la vincula al vendedor (misma operación que CU-13) y responde `200` con el vendedor y su lista de bodegas actualizada.
+- **Flujos alternativos:** bodega inexistente → `404`; bodega `MARKETPLACE` → `400`; vendedor inexistente → `404`; no es administrador → `403`.
+- **Nota:** la lista `warehouseIds` del vendedor **se calcula** a partir de las bodegas que apuntan a él; no se guarda aparte. Por eso una bodega creada con `sellerId` aparece de inmediato, y reasignar una bodega la quita del vendedor anterior.
 - **Endpoint:** `PATCH /api/sellers/:userId/warehouses`
 
 > Consultar un vendedor (`GET /api/sellers/:userId`) está permitido al propio vendedor, al administrador y al supervisor.
@@ -181,14 +182,14 @@ flowchart LR
   2. Si el actor es **vendedor**, el sistema fuerza el tipo `SELLER` y toma el `sellerId` del token.
   3. El sistema valida las reglas del tipo: una bodega `SELLER` exige un vendedor existente; una `MARKETPLACE` no puede tener vendedor.
   4. El sistema crea la bodega y responde `201`.
-- **Flujos alternativos:** un vendedor intenta crear una bodega `MARKETPLACE` → `403`; bodega `SELLER` sin vendedor → `400`; con vendedor inexistente → `404`; bodega `MARKETPLACE` con vendedor → `400`.
+- **Flujos alternativos:** tipo inválido o ubicación vacía → `400`; un vendedor intenta crear una bodega `MARKETPLACE` → `403`; bodega `SELLER` sin vendedor → `400`; con vendedor inexistente → `404`; bodega `MARKETPLACE` con vendedor → `400`.
 - **Endpoint:** `POST /api/warehouses`
 
 ### CU-13 Vincular una bodega a un vendedor
 - **Actor:** Administrador
 - **Precondiciones:** la bodega existe y es de tipo `SELLER`; el vendedor existe.
-- **Flujo principal:** el administrador envía el `sellerId`; el sistema actualiza **ambos lados** de la relación (la bodega apunta al vendedor y el vendedor lista la bodega) y responde `200`.
-- **Flujos alternativos:** bodega de tipo `MARKETPLACE` → `400`; vendedor inexistente → `404`; no es administrador → `403`.
+- **Flujo principal:** el administrador envía el `sellerId`; el sistema hace que la bodega apunte al vendedor (con eso el vendedor ya la lista) y responde `200`.
+- **Flujos alternativos:** bodega inexistente → `404`; bodega de tipo `MARKETPLACE` → `400`; vendedor inexistente → `404`; no es administrador → `403`.
 - **Endpoint:** `PATCH /api/warehouses/:id/link-seller`
 
 > Consultar bodegas: `GET /api/warehouses/:id` (administrador, supervisor, operador logístico, y el vendedor solo si es suya) y `GET /api/warehouses/seller/:sellerId` (el propio vendedor, administrador, supervisor, operador logístico).

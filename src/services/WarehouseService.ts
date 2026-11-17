@@ -12,6 +12,15 @@ type CreateWarehouseInput = {
 
 export const WarehouseService = {
   async createWarehouse(input: CreateWarehouseInput): Promise<Warehouse> {
+    if (!Object.values(WarehouseType).includes(input.type)) {
+      throw new ValidationError(
+        `Tipo de bodega inválido. Valores permitidos: ${Object.values(WarehouseType).join(", ")}.`
+      );
+    }
+    if (typeof input.location !== "string" || input.location.trim() === "") {
+      throw new ValidationError("La ubicación de la bodega es obligatoria.");
+    }
+
     if (input.type === WarehouseType.SELLER) {
       if (!input.sellerId) {
         throw new ValidationError("Una bodega de tipo SELLER debe tener un vendedor asociado.");
@@ -48,7 +57,8 @@ export const WarehouseService = {
     return WarehouseRepository.findBySellerId(sellerId);
   },
 
-  // Vincula una bodega existente a un vendedor (actualiza ambos lados de la relación)
+  // Vincula una bodega existente a un vendedor. Basta con actualizar warehouses.seller_id:
+  // la lista de bodegas del vendedor se calcula a partir de ahí.
   async linkToSeller(warehouseId: string, sellerId: string): Promise<Warehouse> {
     const warehouse = await this.getWarehouseById(warehouseId);
 
@@ -56,8 +66,8 @@ export const WarehouseService = {
       throw new ValidationError("Solo se pueden vincular bodegas de tipo SELLER a un vendedor.");
     }
 
-    await SellerService.assignWarehouse(sellerId, warehouseId);
-    // Antes se mutaba el objeto en memoria sin guardarlo; ahora se persiste explícitamente
+    await SellerService.getSellerByUserId(sellerId); // valida que el vendedor exista
+
     const updated = await WarehouseRepository.update(warehouseId, { sellerId });
     return updated!;
   },

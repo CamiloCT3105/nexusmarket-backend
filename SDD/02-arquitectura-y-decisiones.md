@@ -157,7 +157,7 @@ stateDiagram-v2
 | `User` | `id` (UUID) | — |
 | `Credential` | `userId` | 1 a 1 con `User` (guarda el hash de la contraseña, separado a propósito) |
 | `Buyer` | `userId` | 1 a 1 con `User` |
-| `Seller` | `userId` | 1 a 1 con `User`; tiene `warehouseIds` |
+| `Seller` | `userId` | 1 a 1 con `User`; `warehouseIds` se calcula desde las bodegas que apuntan a él |
 | `Warehouse` | `id` | opcionalmente pertenece a un `Seller` |
 | `Product` | `id` | pertenece a un `Seller`; tiene `Variant[]` |
 | `InventoryItem` | `productId` + `warehouseId` | existencias de un producto en una bodega |
@@ -174,7 +174,8 @@ stateDiagram-v2
 | Base de datos | Entidades | Por qué | Estado |
 |---|---|---|---|
 | **PostgreSQL** (Prisma) | `User`, `Credential` | Integridad y unicidad del correo. | ✅ Migrado |
-| **PostgreSQL** (Prisma) | `Buyer`, `Seller`, `Warehouse`, `InventoryItem`, `Order`, `Invoice`, `Shipment`, `ReturnRequest`, `Refund` | Dinero, máquinas de estado y relaciones fuertes; el checkout y las devoluciones necesitan **transacciones** y bloqueo de filas de inventario. Los reportes se resuelven con `GROUP BY`. | Esquema creado; repositorios pendientes |
+| **PostgreSQL** (Prisma) | `Buyer` (+ `buyer_addresses`), `Seller`, `Warehouse` | Relaciones fuertes con `users`; las bodegas de un vendedor se calculan con la llave foránea `warehouses.seller_id`. | ✅ Migrado |
+| **PostgreSQL** (Prisma) | `InventoryItem`, `Order`, `Invoice`, `Shipment`, `ReturnRequest`, `Refund` | Dinero, máquinas de estado y relaciones fuertes; el checkout y las devoluciones necesitan **transacciones** y bloqueo de filas de inventario. Los reportes se resuelven con `GROUP BY`. | Esquema creado; repositorios pendientes |
 | **MongoDB** (Mongoose) | `Product` | Catálogo flexible: variantes y atributos distintos según el tipo de producto. | Pendiente |
 | **MongoDB** (Mongoose) | `Cart` | Un documento por comprador, de escritura frecuente y vida corta (puede expirar con índice TTL). | Pendiente |
 | **MongoDB** (Mongoose) | `InventoryMovement` | Bitácora que solo crece. | Pendiente |
@@ -228,19 +229,21 @@ Hoy lo usa `AuthService.registerUser` (usuario + credencial). Se usará en el ch
 | D-33 | **Migración incremental**, módulo por módulo, empezando por usuarios y credenciales. | Cada paso se prueba de punta a punta antes de seguir; los módulos en memoria y en PostgreSQL conviven. | Migrar todo de una vez. |
 | D-34 | **Dinero como `DECIMAL(12,2)`** en PostgreSQL. | Evita los errores de redondeo del punto flotante. Los repositorios lo convierten a `number` para no cambiar los modelos de dominio. | Enteros en centavos (habría cambiado toda la API). |
 | D-35 | **La restricción `UNIQUE` de la base de datos es la última defensa** contra duplicados; su violación (Prisma `P2002`) se responde como `409`. | El chequeo previo del servicio no basta si dos peticiones llegan a la vez. | Confiar solo en el chequeo del servicio. |
+| D-36 | **`Seller.warehouseIds` se calcula** desde `warehouses.seller_id` en lugar de guardarse como lista. | Una sola fuente de verdad: elimina la limitación de que crear una bodega con `sellerId` no actualizaba al vendedor, y reasignar una bodega ya no la deja duplicada en dos vendedores. `PATCH /sellers/:userId/warehouses` pasa a usar `WarehouseService.linkToSeller`, que valida la bodega. | Columna con lista de ids en `sellers`. |
+| D-37 | **Direcciones del comprador en su propia tabla** (`buyer_addresses`) con `is_primary` y `position`. | Modelo relacional normal; `position` conserva el orden de las direcciones adicionales. Se guardan solo los cuatro campos del modelo, nunca lo que el cliente agregue de más. | Columna JSON en `buyers`. |
+| D-38 | **Validación de entrada antes de la base de datos** (direcciones, tipo de bodega, estado comercial) e **ids mal formados = `404`**. | Con PostgreSQL, un campo faltante o un id que no es UUID provocaban un error `500`; ahora son `400` y `404`, que es lo que corresponde. | Dejar que la base de datos rechace el dato. |
 
 ## 8. Limitaciones conocidas
 
 Se documentan de forma honesta para que no se confundan con funcionalidades:
 
-- **Migración a base de datos incompleta**: solo usuarios y credenciales están en PostgreSQL; el resto de módulos sigue en memoria y se pierde al reiniciar. Mientras tanto puede quedar, por ejemplo, un perfil de comprador en memoria que apunta a un usuario persistido.
+- **Migración a base de datos incompleta**: usuarios, credenciales, compradores, vendedores y bodegas están en PostgreSQL; el resto de módulos sigue en memoria y se pierde al reiniciar. Mientras tanto puede quedar, por ejemplo, un perfil de comprador en memoria que apunta a un usuario persistido.
 - **El pago es simulado**: solo cambia el estado del pedido.
 - **Los productos digitales también pasan por inventario**, aunque conceptualmente no tienen stock físico.
 - **Toda unidad devuelta vuelve al stock disponible**; no se distingue si regresó defectuosa.
 - **Aprobar una devolución no es atómico**: con una base de datos real debería ir en una transacción.
 - **El checkout no es atómico frente a peticiones simultáneas**: al ser asíncrono, dos checkouts del mismo producto pueden intercalarse entre la validación y la reserva (la reserva vuelve a validar el stock, pero podrían quedar reservas parciales). Se resolverá con una transacción SQL y bloqueo de filas de inventario.
 - **`PATCH /orders/:id/status` (solo ADMIN) puede desincronizar** un pedido respecto de su envío; es una herramienta administrativa.
-- **`Seller.warehouseIds` solo se actualiza** al vincular una bodega (`link-seller`) o asignarla por el perfil; crear una bodega con `sellerId` no lo actualiza.
 - **Validación de entrada limitada**: no se verifica que los valores de enums enviados en el body (`status`, `type`, `commercialStatus`…) pertenezcan al enum, ni se usa una librería de validación.
 - **Los correos no se normalizan** (mayúsculas y minúsculas cuentan como distintos).
 - **Sin límite de intentos de login**, sin paginación y sin pruebas automatizadas.
