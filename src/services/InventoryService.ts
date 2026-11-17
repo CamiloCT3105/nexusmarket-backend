@@ -1,39 +1,31 @@
 import { randomUUID } from "crypto";
 import { InventoryItem, InventoryMovement, MovementType } from "../models/Inventory";
 import { InventoryRepository } from "../repositories/InventoryRepository";
+import { InventoryMovementRepository } from "../repositories/InventoryMovementRepository";
 import { ProductService } from "./ProductService";
 import { WarehouseService } from "./WarehouseService";
 import { NotFoundError, ValidationError } from "../errors/AppError";
+import { afterCommit } from "../db/transaction";
 
 const NO_INVENTORY_MESSAGE = "No existe inventario registrado para este producto en esta bodega.";
+
+// Las cantidades son unidades enteras: ni cero, ni negativas, ni fracciones
+function assertPositiveInteger(quantity: unknown, label: string): asserts quantity is number {
+  if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity <= 0) {
+    throw new ValidationError(`La cantidad ${label} debe ser un número entero mayor a cero.`);
+  }
+}
 
 export const InventoryService = {
   // Registra ingreso de mercancía (o crea el registro de inventario si no existe)
   async registerInbound(productId: string, warehouseId: string, quantity: number): Promise<InventoryItem> {
-    if (quantity <= 0) {
-      throw new ValidationError("La cantidad de ingreso debe ser mayor a cero.");
-    }
+    assertPositiveInteger(quantity, "de ingreso");
 
     // Validamos que producto y bodega existan realmente
     await ProductService.getProductById(productId);
     await WarehouseService.getWarehouseById(warehouseId);
 
-    let item = await InventoryRepository.findItem(productId, warehouseId);
-
-    if (!item) {
-      item = await InventoryRepository.createItem({
-        productId,
-        warehouseId,
-        quantity: 0,
-        reservedQuantity: 0,
-        damagedQuantity: 0,
-      });
-    }
-
-    const updated = (await InventoryRepository.updateItem(productId, warehouseId, {
-      quantity: item.quantity + quantity,
-    }))!;
-
+    const updated = await InventoryRepository.addQuantity(productId, warehouseId, quantity);
     await this.recordMovement(productId, warehouseId, MovementType.INBOUND, quantity);
     return updated;
   },
@@ -44,72 +36,58 @@ export const InventoryService = {
   },
 
   async reserveStock(productId: string, warehouseId: string, quantity: number): Promise<InventoryItem> {
-    if (quantity <= 0) {
-      throw new ValidationError("La cantidad a reservar debe ser mayor a cero.");
-    }
+    assertPositiveInteger(quantity, "a reservar");
+    await this.getAvailability(productId, warehouseId); // 404 si no hay registro
 
-    const item = await this.getAvailability(productId, warehouseId);
-
-    const available = this.getAvailableQuantity(item);
-    if (quantity > available) {
+    if (!(await InventoryRepository.tryReserve(productId, warehouseId, quantity))) {
+      // Releemos para informar el disponible real en este momento
+      const current = await this.getAvailability(productId, warehouseId);
       throw new ValidationError(
-        `Stock insuficiente para reservar. Disponible: ${available}, solicitado: ${quantity}.`
+        `Stock insuficiente para reservar. Disponible: ${this.getAvailableQuantity(current)}, solicitado: ${quantity}.`
       );
     }
 
-    const updated = (await InventoryRepository.updateItem(productId, warehouseId, {
-      reservedQuantity: item.reservedQuantity + quantity,
-    }))!;
-
     await this.recordMovement(productId, warehouseId, MovementType.RESERVE, quantity);
-    return updated;
+    return this.getAvailability(productId, warehouseId);
   },
 
   // Confirma la salida de mercancía previamente reservada (ej: al despachar un pedido)
   async confirmOutbound(productId: string, warehouseId: string, quantity: number): Promise<InventoryItem> {
-    const item = await this.getAvailability(productId, warehouseId);
+    assertPositiveInteger(quantity, "a despachar");
+    await this.getAvailability(productId, warehouseId);
 
-    if (quantity > item.reservedQuantity) {
+    if (!(await InventoryRepository.tryConfirmOutbound(productId, warehouseId, quantity))) {
       throw new ValidationError("No se puede despachar más cantidad de la que está reservada.");
     }
 
-    const updated = (await InventoryRepository.updateItem(productId, warehouseId, {
-      quantity: item.quantity - quantity,
-      reservedQuantity: item.reservedQuantity - quantity,
-    }))!;
-
     await this.recordMovement(productId, warehouseId, MovementType.OUTBOUND, quantity);
-    return updated;
+    return this.getAvailability(productId, warehouseId);
   },
 
   // Marca unidades como dañadas (no se pueden reservar ni vender)
   async markAsDamaged(productId: string, warehouseId: string, quantity: number): Promise<InventoryItem> {
-    const item = await this.getAvailability(productId, warehouseId);
+    assertPositiveInteger(quantity, "dañada");
+    await this.getAvailability(productId, warehouseId);
 
-    const availableNonDamaged = item.quantity - item.damagedQuantity;
-    if (quantity > availableNonDamaged) {
+    if (!(await InventoryRepository.tryMarkDamaged(productId, warehouseId, quantity))) {
       throw new ValidationError(
         "No hay suficiente stock sin dañar para marcar esa cantidad como dañada."
       );
     }
 
-    const updated = (await InventoryRepository.updateItem(productId, warehouseId, {
-      damagedQuantity: item.damagedQuantity + quantity,
-    }))!;
-
     await this.recordMovement(productId, warehouseId, MovementType.ADJUSTMENT, quantity);
-    return updated;
+    return this.getAvailability(productId, warehouseId);
   },
 
   async registerReturn(productId: string, warehouseId: string, quantity: number): Promise<InventoryItem> {
-    const item = await this.getAvailability(productId, warehouseId);
+    assertPositiveInteger(quantity, "devuelta");
 
-    const updated = (await InventoryRepository.updateItem(productId, warehouseId, {
-      quantity: item.quantity + quantity,
-    }))!;
+    if (!(await InventoryRepository.addReturnedQuantity(productId, warehouseId, quantity))) {
+      throw new NotFoundError(NO_INVENTORY_MESSAGE);
+    }
 
     await this.recordMovement(productId, warehouseId, MovementType.RETURN, quantity);
-    return updated;
+    return this.getAvailability(productId, warehouseId);
   },
 
   async getAvailability(productId: string, warehouseId: string): Promise<InventoryItem> {
@@ -124,7 +102,8 @@ export const InventoryService = {
     return InventoryRepository.findAllItems();
   },
 
-  // Busca, entre las bodegas indicadas, la primera que tenga stock disponible suficiente
+  // Busca, entre las bodegas indicadas, la primera que tenga stock disponible suficiente.
+  // Es solo una consulta: la reserva real (atómica) la hace reserveStock.
   async findWarehouseWithStock(
     productId: string,
     warehouseIds: string[],
@@ -139,13 +118,13 @@ export const InventoryService = {
     return undefined;
   },
 
-  // Método de apoyo: registra cada movimiento en la bitácora
+  // Registra el movimiento en la bitácora cuando la transacción (si la hay) se confirme
   async recordMovement(
     productId: string,
     warehouseId: string,
     type: MovementType,
     quantity: number
-  ): Promise<InventoryMovement> {
+  ): Promise<void> {
     const movement: InventoryMovement = {
       id: randomUUID(),
       productId,
@@ -154,6 +133,6 @@ export const InventoryService = {
       quantity,
       createdAt: new Date(),
     };
-    return InventoryRepository.addMovement(movement);
+    await afterCommit(() => InventoryMovementRepository.add(movement));
   },
 };

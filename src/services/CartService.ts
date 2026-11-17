@@ -15,8 +15,8 @@ export const CartService = {
   },
 
   async addItem(buyerId: string, productId: string, quantity: number): Promise<Cart> {
-    if (quantity <= 0) {
-      throw new ValidationError("La cantidad debe ser mayor a cero.");
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new ValidationError("La cantidad debe ser un número entero mayor a cero.");
     }
 
     const product = await ProductService.getProductById(productId);
@@ -48,9 +48,9 @@ export const CartService = {
   },
 
   async updateQuantity(buyerId: string, productId: string, quantity: number): Promise<Cart> {
-    if (quantity <= 0) {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new ValidationError(
-        "La cantidad debe ser mayor a cero. Usa removeItem para eliminar el producto."
+        "La cantidad debe ser un número entero mayor a cero. Usa removeItem para eliminar el producto."
       );
     }
 
