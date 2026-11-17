@@ -2,20 +2,21 @@ import app from "./app";
 import { env } from "./config/env";
 import { AuthService } from "./services/AuthService";
 import { checkPostgresConnection, prisma } from "./db/prisma";
+import { connectMongo, disconnectMongo } from "./db/mongo";
 
 async function main(): Promise<void> {
-  await checkPostgresConnection();
+  await Promise.all([checkPostgresConnection(), connectMongo()]);
   await AuthService.seedAdmin();
 
   const server = app.listen(env.port, () => {
     console.log(`Servidor corriendo en http://localhost:${env.port}`);
   });
 
-  // Cierre ordenado: deja de aceptar peticiones y libera las conexiones a la base de datos
+  // Cierre ordenado: deja de aceptar peticiones y libera las conexiones a ambas bases de datos
   const shutdown = (signal: string) => {
     console.log(`${signal} recibido, cerrando servidor...`);
     server.close(() => {
-      prisma.$disconnect().finally(() => process.exit(0));
+      Promise.allSettled([prisma.$disconnect(), disconnectMongo()]).finally(() => process.exit(0));
     });
   };
   process.on("SIGINT", () => shutdown("SIGINT"));

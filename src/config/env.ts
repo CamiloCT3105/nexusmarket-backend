@@ -15,9 +15,16 @@ if (!databaseUrl) {
   );
 }
 
+const mongoUrl = process.env.MONGO_URL;
+if (!mongoUrl) {
+  throw new Error(
+    "La variable de entorno MONGO_URL es obligatoria (ver .env.example y docker-compose.yml)."
+  );
+}
+
 export const env = {
   databaseUrl,
-  mongoUrl: process.env.MONGO_URL,
+  mongoUrl,
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || "development",
   jwtSecret,

@@ -79,6 +79,7 @@ Entregable
 | 14 | **Compradores, vendedores y bodegas en PostgreSQL** | Mismo orden que las fases 2 y 3: perfiles y bodegas son la base de inventario y pedidos. |
 | 15 | **Inventario y pedidos en PostgreSQL** con checkout transaccional | Es el núcleo del negocio y la parte más sensible a la concurrencia; se apoya en perfiles y bodegas ya migrados. |
 | 16 | **Facturas, envíos, devoluciones y reembolsos en PostgreSQL**; **reportes con SQL** | Cierra la parte relacional: posventa depende de pedidos, y los reportes ya pueden agregar todo en la base de datos. |
+| 17 | **Catálogo, carritos y bitácora en MongoDB** | Termina la migración: ya no queda ningún repositorio en memoria. |
 
 ## 4. Resumen por módulo
 
@@ -126,8 +127,10 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 21 | Cantidad `1.5` en el carrito terminaba en `500` al hacer checkout | La columna `quantity` es entera y la validación solo exigía `> 0`. | Validar enteros positivos en carrito e inventario. |
 | 22 | Riesgo de dos reembolsos por una misma devolución (resuelto en el diseño) | Dos aprobaciones simultáneas leían `REQUESTED` y ambas reingresaban stock y generaban reembolso. | Transición condicional (`WHERE status = 'REQUESTED'`) dentro de la misma transacción que el reingreso y el reembolso. |
 | 23 | Riesgo de devolver más unidades de las compradas (resuelto en el diseño) | Varias solicitudes simultáneas sumaban "lo ya devuelto" antes de que las otras se guardaran. | Bloquear la fila del pedido (`SELECT ... FOR UPDATE`) durante la validación; probado con 3 solicitudes de 2 unidades sobre 3 compradas. |
-| 24 | Edición del SDD con un script falló: "texto no encontrado" | Los `.md` usan saltos de línea CRLF y el script buscaba `
-`. | Normalizar a LF antes de reemplazar y restaurar CRLF al guardar. |
+| 24 | Edición del SDD con un script falló: "texto no encontrado" | Los `.md` usan saltos de línea CRLF y el script buscaba `\n`. | Normalizar a LF antes de reemplazar y restaurar CRLF al guardar. |
+| 25 | Dos "agregar al carrito" simultáneos podían perder unidades (resuelto en el diseño) | El servicio leía el carrito, sumaba en Node y reescribía la lista: el segundo pisaba al primero. | Operaciones atómicas de MongoDB (`$inc` / `$push` con reintento); probado con 10 agregados simultáneos. |
+| 26 | Datos inválidos de producto terminarían en errores `500` de Mongoose (nombre vacío, precio como texto, tipo inexistente) | Los esquemas de MongoDB validan, pero sus errores no son errores de la aplicación. | Validar en `ProductService` antes de guardar → `400` con mensaje claro. |
+| 27 | La fila 24 de esta bitácora quedó partida en dos líneas (tabla rota en GitHub) | Al escribirla con un *heredoc* del shell, el `\n` del texto se convirtió en un salto de línea real. | Escribir los scripts de edición en archivos en lugar de *heredocs* y revisar el resultado con `cat -A`. |
 
 ## 6. Aprendizajes sobre trabajar con IA
 
@@ -139,7 +142,7 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 
 ## 7. Próximos pasos
 
-1. **Terminar la migración a base de datos** (usuarios y credenciales ya están en PostgreSQL): perfiles y bodegas; inventario, pedidos y posventa con transacciones; después catálogo, carritos y bitácora en **MongoDB** (Mongoose). Ver `SDD/02`, sección 6.1.
+1. ~~Migración a base de datos~~ ✅ completada: PostgreSQL + MongoDB (ver `SDD/02`, sección 6.1).
 2. **Validación de entradas** con una librería (por ejemplo, `zod`) y validación de enums en el body.
 3. **Pruebas automatizadas** de servicios y de rutas.
 4. **Frontend en React + TypeScript**, en un repositorio separado, consumiendo esta API.

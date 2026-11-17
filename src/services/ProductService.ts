@@ -12,20 +12,43 @@ type CreateProductInput = {
   type: ProductType;
 };
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+// Precio positivo con máximo dos decimales (centavos)
+function assertValidPrice(price: unknown): asserts price is number {
+  if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+    throw new ValidationError("El precio del producto debe ser mayor a cero.");
+  }
+  if (Number(price.toFixed(2)) !== price) {
+    throw new ValidationError("El precio admite como máximo dos decimales.");
+  }
+}
+
 export const ProductService = {
   async createProduct(input: CreateProductInput): Promise<Product> {
+    if (!isNonEmptyString(input.name)) {
+      throw new ValidationError("El nombre del producto es obligatorio.");
+    }
+    if (input.description !== undefined && typeof input.description !== "string") {
+      throw new ValidationError("La descripción debe ser texto.");
+    }
+    assertValidPrice(input.price);
+    if (!Object.values(ProductType).includes(input.type)) {
+      throw new ValidationError(
+        `Tipo de producto inválido. Valores permitidos: ${Object.values(ProductType).join(", ")}.`
+      );
+    }
+
     // Validamos que el vendedor exista antes de crear el producto
     await SellerService.getSellerByUserId(input.sellerId);
-
-    if (input.price <= 0) {
-      throw new ValidationError("El precio del producto debe ser mayor a cero.");
-    }
 
     const newProduct: Product = {
       id: randomUUID(),
       sellerId: input.sellerId,
-      name: input.name,
-      description: input.description,
+      name: input.name.trim(),
+      description: input.description ?? "",
       price: input.price,
       type: input.type,
       variants: [],
@@ -52,22 +75,33 @@ export const ProductService = {
   },
 
   async addVariant(productId: string, variantName: string, variantValue: string): Promise<Product> {
-    const product = await this.getProductById(productId);
+    if (!isNonEmptyString(variantName) || !isNonEmptyString(variantValue)) {
+      throw new ValidationError("La variante necesita nombre y valor (por ejemplo, Color: Rojo).");
+    }
 
     const newVariant: Variant = {
       id: randomUUID(),
-      name: variantName,
-      value: variantValue,
+      name: variantName.trim(),
+      value: variantValue.trim(),
     };
 
-    const updatedVariants = [...product.variants, newVariant];
-    const updated = await ProductRepository.update(productId, { variants: updatedVariants });
-    return updated!;
+    const updated = await ProductRepository.addVariant(productId, newVariant);
+    if (!updated) {
+      throw new NotFoundError("Producto no encontrado.");
+    }
+    return updated;
   },
 
   async changeStatus(productId: string, newStatus: ProductStatus): Promise<Product> {
-    await this.getProductById(productId); // valida existencia
-    const updated = await ProductRepository.update(productId, { status: newStatus });
-    return updated!;
+    if (!Object.values(ProductStatus).includes(newStatus)) {
+      throw new ValidationError(
+        `Estado de producto inválido. Valores permitidos: ${Object.values(ProductStatus).join(", ")}.`
+      );
+    }
+    const updated = await ProductRepository.updateStatus(productId, newStatus);
+    if (!updated) {
+      throw new NotFoundError("Producto no encontrado.");
+    }
+    return updated;
   },
 };
