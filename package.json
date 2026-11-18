@@ -14,7 +14,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "test:e2e": "node tests/e2e/run.mjs",
-    "test": "npm run test:e2e"
+    "test": "npm run test:e2e",
+    "seed:demo": "node scripts/seed-demo.mjs"
   },
   "repository": {
     "type": "git",
@@ -47,5 +48,8 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "9.12.1",
     "pg": "8.23.1"
+  },
+  "engines": {
+    "node": ">=22.12"
   }
 }

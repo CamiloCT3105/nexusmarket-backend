@@ -1,0 +1,37 @@
+# Blueprint de Render: crea el servicio web del backend con su configuración.
+# Las bases de datos son externas (PostgreSQL en Neon y MongoDB en Atlas); sus URL y los datos del
+# administrador se cargan a mano en el panel de Render (sync: false), nunca en este archivo.
+# Guía completa: DEPLOY.md
+services:
+  - type: web
+    name: nexusmarket-api
+    runtime: node
+    plan: free
+    region: virginia # misma región que Neon (aws-us-east-1) y Atlas (us-east-1): menos latencia
+    # --include=dev: con NODE_ENV=production, npm ci omitiría TypeScript y los tipos, y la compilación fallaría.
+    # Las migraciones se aplican en cada despliegue antes de compilar (prisma migrate deploy no borra datos).
+    buildCommand: npm ci --include=dev && npx prisma migrate deploy && npm run build
+    startCommand: node dist/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true # Render genera un secreto aleatorio
+      - key: JWT_EXPIRES_IN_SECONDS
+        value: "28800"
+      - key: DATABASE_URL # Neon: cadena de conexión directa (sin -pooler), con ?sslmode=require
+        sync: false
+      - key: MONGO_URL # Atlas: mongodb+srv://…/nexusmarket?retryWrites=true&w=majority
+        sync: false
+      - key: CORS_ORIGIN # URL del frontend en Vercel, por ejemplo https://nexusmarket.vercel.app
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_DOCUMENT_NUMBER
+        sync: false
