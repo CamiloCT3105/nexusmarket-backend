@@ -28,6 +28,16 @@ function toOrder(row: OrderRow): Order {
     total: row.total.toNumber(),
     status: row.status as OrderStatus,
     createdAt: row.createdAt,
+    ...(row.shippingStreet !== null && row.shippingCity !== null && row.shippingCountry !== null && row.shippingPostalCode !== null
+      ? {
+          shippingAddress: {
+            street: row.shippingStreet,
+            city: row.shippingCity,
+            country: row.shippingCountry,
+            postalCode: row.shippingPostalCode,
+          },
+        }
+      : {}),
   };
 }
 
@@ -86,6 +96,10 @@ export const OrderRepository = {
         total: order.total,
         status: order.status,
         createdAt: order.createdAt,
+        shippingStreet: order.shippingAddress?.street ?? null,
+        shippingCity: order.shippingAddress?.city ?? null,
+        shippingCountry: order.shippingAddress?.country ?? null,
+        shippingPostalCode: order.shippingAddress?.postalCode ?? null,
         items: {
           create: order.items.map((item) => ({
             productId: item.productId,

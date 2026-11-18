@@ -191,6 +191,7 @@ async function main() {
   runSuite("Posventa y reportes", "post-sales.mjs");
   runSuite("Concurrencia de inventario y pedidos", "concurrency.mjs");
   runSuite("Flujo completo", "full-flow.mjs");
+  runSuite("Dirección de entrega y estado comercial", "checkout-address.mjs");
   runSuite("Perfiles y bodegas", "profiles.mjs", "setup");
   runSuite("Catálogo y carritos", "catalog-carts.mjs", "setup");
   runSuite("Registros simultáneos", "race.mjs");

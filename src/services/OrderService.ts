@@ -5,6 +5,8 @@ import { OrderFilter, OrderRepository } from "../repositories/OrderRepository";
 import { AuthUser } from "../models/AuthUser";
 import { UserRole } from "../models/User";
 import { Page, PageRequest, toPage } from "../utils/pagination";
+import { CommercialStatus } from "../models/Buyer";
+import { BuyerService } from "./BuyerService";
 import { CartService } from "./CartService";
 import { ProductService } from "./ProductService";
 import { WarehouseService } from "./WarehouseService";
@@ -40,18 +42,36 @@ async function sellerProductIds(sellerId: string): Promise<Set<string>> {
   return new Set(products.map((product) => product.id));
 }
 
+// La dirección de entrega no se comparte con el vendedor: el despacho lo hace el operador logístico
 function sellerView(order: Order, productIds: Set<string>): OrderView {
+  const { shippingAddress: _private, ...rest } = order;
   const items = order.items.filter((item) => productIds.has(item.productId));
   return {
-    ...order,
+    ...rest,
     items,
     sellerSubtotal: roundMoney(items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0)),
   };
 }
 
 export const OrderService = {
-  // Convierte el carrito del comprador en un pedido
-  async checkout(buyerId: string): Promise<Order> {
+  // Convierte el carrito del comprador en un pedido.
+  // addressIndex elige la dirección de entrega: 0 = principal (por defecto), 1.. = adicionales en orden.
+  async checkout(buyerId: string, addressIndex: unknown = 0): Promise<Order> {
+    const buyer = await BuyerService.getBuyerByUserId(buyerId);
+    // El estado comercial es la condición del comprador para realizar compras (especificación, perfil del comprador)
+    if (buyer.commercialStatus === CommercialStatus.RESTRICTED) {
+      throw new ForbiddenError(
+        "Tu cuenta tiene una restricción comercial y no puede confirmar pedidos. Comunícate con el administrador."
+      );
+    }
+    const addresses = [buyer.primaryAddress, ...buyer.additionalAddresses];
+    if (typeof addressIndex !== "number" || !Number.isInteger(addressIndex) || addressIndex < 0 || addressIndex >= addresses.length) {
+      throw new ValidationError(
+        `La dirección de entrega no es válida: elige un número entre 0 (principal) y ${addresses.length - 1}.`
+      );
+    }
+    const shippingAddress = addresses[addressIndex]!;
+
     const cart = await CartService.getOrCreateCart(buyerId);
     if (cart.items.length === 0) {
       throw new ValidationError("El carrito está vacío.");
@@ -94,6 +114,7 @@ export const OrderService = {
       total: roundMoney(plannedItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0)),
       status: OrderStatus.PENDING_PAYMENT,
       createdAt: new Date(),
+      shippingAddress: { ...shippingAddress },
     };
 
     // Fase 2: reservas + pedido en UNA transacción. Cada reserva es un UPDATE condicional

@@ -14,10 +14,12 @@ function canAccessOrder(authUser: AuthUser, order: Order): boolean {
 }
 
 export const OrderController = {
-  async checkout(_req: Request, res: Response): Promise<void> {
+  // POST /api/orders/checkout  { addressIndex?: number }  (0 = dirección principal, por defecto)
+  async checkout(req: Request, res: Response): Promise<void> {
     // El comprador es SIEMPRE quien está autenticado: no se lee del body
     const authUser = getAuthUser(res);
-    const order = await OrderService.checkout(authUser.id);
+    const { addressIndex } = (req.body ?? {}) as { addressIndex?: unknown };
+    const order = await OrderService.checkout(authUser.id, addressIndex ?? 0);
     res.status(201).json(order);
   },
 

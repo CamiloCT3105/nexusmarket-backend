@@ -115,7 +115,7 @@ Si `ADMIN_EMAIL`, `ADMIN_PASSWORD` o `ADMIN_DOCUMENT_NUMBER` no están definidos
 npm test
 ```
 
-Corre más de 300 comprobaciones de punta a punta contra un servidor real y bases de datos reales: flujo completo de compra, concurrencia (sobreventa, deadlocks, doble despacho), posventa, reportes con cifras exactas, catálogo y listados por rol, CORS y persistencia tras reiniciar.
+Corre más de 300 comprobaciones de punta a punta contra un servidor real y bases de datos reales: flujo completo de compra, dirección de entrega y estado comercial, concurrencia (sobreventa, deadlocks, doble despacho), posventa, reportes con cifras exactas, catálogo y listados por rol, CORS y persistencia tras reiniciar.
 
 - Requiere Docker con las bases levantadas (`npm run db:up`).
 - Usa **bases de prueba separadas** (`nexusmarket_e2e`), que se vacían al empezar: tus datos de desarrollo no se tocan. El runner se niega a correr si el nombre de la base no contiene `e2e` o `test`.
@@ -301,10 +301,10 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| POST | `/checkout` | Comprador |
+| POST | `/checkout` | Comprador con estado comercial `ACTIVE` — `{ addressIndex? }` elige la dirección de entrega (0 = principal); el pedido guarda una copia (`shippingAddress`) |
 | GET | `/` | Todos — `?status=&buyerId=&from=&to=`. Comprador: los suyos; **vendedor: los que incluyen sus productos, solo con sus líneas y `sellerSubtotal`**; operador, supervisor y admin: todos |
 | GET | `/buyer/:buyerId` | Propio, Admin, Supervisor |
-| GET | `/:id` | Comprador (propio), Vendedor (solo sus líneas), Operador Logístico, Supervisor, Admin |
+| GET | `/:id` | Comprador (propio), Vendedor (solo sus líneas, sin dirección de entrega), Operador Logístico, Supervisor, Admin |
 | POST | `/:id/pay` | Comprador (propio) |
 | PATCH | `/:id/status` | Admin |
 
@@ -411,7 +411,8 @@ La lista completa está en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-li
 - [x] Pruebas automatizadas de punta a punta (`npm test`)
 - [x] Preparación para el frontend: CORS, catálogo con filtros y listados paginados por rol
 - [x] Documento de identidad único, operador logístico en inventario y pedidos visibles para el vendedor (brechas con la especificación)
-- [ ] Frontend en React + TypeScript (repositorio separado)
+- [x] Dirección de entrega en el pedido y estado comercial que bloquea compras (brechas con la especificación)
+- [x] Frontend en React + TypeScript ([`nexusmarket-frontend`](https://github.com/CamiloCT3105/nexusmarket-frontend))
 - [ ] Productos digitales con entrega inmediata tras el pago
 
 ## Licencia

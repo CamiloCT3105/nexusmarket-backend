@@ -137,6 +137,9 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 30 | Node 24 avisaba de un riesgo de seguridad al ejecutar `npx` con `shell: true` | Los argumentos se concatenan sin escapar. | Ejecutar `prisma` y `tsc` directamente con `node`, sin shell. |
 | 31 | Todas las suites fallaron con `401` tras agregar el documento de identidad | El servidor de pruebas ya no sembraba al administrador: faltaba `ADMIN_DOCUMENT_NUMBER` en el runner. | Pasar la variable; la falla en cascada confirmó que sin documento no se crea el administrador. |
 | 32 | `Module "mongoose" has no exported member 'FilterQuery'` | Mongoose 9 renombró el tipo. | Usar `QueryFilter`. |
+| 33 | El operador logístico no podía saber a dónde despachar | El pedido no guardaba la dirección de entrega y el operador no tiene acceso al perfil del comprador. | El pedido copia la dirección elegida al confirmar (D-60, RN-64). |
+| 34 | El estado comercial `RESTRICTED` no tenía ningún efecto | Se guardaba, pero ningún flujo lo consultaba, aunque la especificación lo define como la condición para comprar. | El checkout lo valida (RN-63); suite `checkout-address.mjs`. |
+| 35 | El frontend no podía cambiar el estado comercial (`400`) | Enviaba `{ status }` y el backend espera `{ commercialStatus }`. Se detectó al escribir la suite nueva. | Corregido en el frontend y cubierto por una prueba de punta a punta allá. |
 
 ## 6. Aprendizajes sobre trabajar con IA
 
@@ -152,4 +155,4 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 2. **Validación de entradas** con una librería (por ejemplo, `zod`).
 3. ~~Pruebas automatizadas~~ ✅ `npm test` (e2e).
 4. **Productos digitales** con entrega inmediata tras el pago.
-4. **Frontend en React + TypeScript**, en un repositorio separado, consumiendo esta API.
+5. ~~Frontend en React + TypeScript~~ ✅ en el repositorio `nexusmarket-frontend`, con sus propias pruebas e integración continua.
