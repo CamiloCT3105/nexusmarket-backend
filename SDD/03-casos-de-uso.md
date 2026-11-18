@@ -141,7 +141,8 @@ flowchart LR
 ### CU-09 Actualizar el estado comercial de un comprador
 - **Actor:** Administrador
 - **Precondiciones:** perfil de comprador existente.
-- **Flujo principal:** el administrador envía el nuevo estado comercial (`ACTIVE` o `RESTRICTED`); el sistema lo actualiza y responde `200`.
+- **Flujo principal:** el administrador envía el nuevo estado comercial (`ACTIVE` o `RESTRICTED`) en el campo `commercialStatus`; el sistema lo actualiza y responde `200`.
+- **Efecto:** mientras esté `RESTRICTED`, el comprador no puede confirmar pedidos (RN-63); conserva su acceso, su carrito y sus pedidos anteriores.
 - **Flujos alternativos:** estado distinto de `ACTIVE`/`RESTRICTED` → `400`; no es administrador → `403`; perfil inexistente → `404`.
 - **Endpoint:** `PATCH /api/buyers/:userId/commercial-status`
 
@@ -306,18 +307,20 @@ flowchart LR
 
 ### CU-25 Realizar checkout
 - **Actor:** Comprador
-- **Precondiciones:** el carrito tiene al menos un producto.
+- **Precondiciones:** el carrito tiene al menos un producto y el comprador tiene estado comercial `ACTIVE`.
 - **Flujo principal:**
-  1. El comprador solicita el checkout, **sin enviar datos**: el comprador es quien está autenticado.
+  1. El comprador solicita el checkout. Solo puede indicar **qué dirección de entrega usar** (`addressIndex`: `0` = principal, por defecto; `1` en adelante = adicionales en su orden). El comprador es siempre quien está autenticado, nunca un dato del cuerpo.
   2. **Fase de validación:** para cada línea el sistema verifica que el producto siga `PUBLISHED`, busca una bodega del vendedor con stock disponible suficiente y copia el precio actual.
-  3. **Fase de reserva (transacción):** solo si todas las líneas son válidas, el sistema reserva el stock de cada una y crea el pedido en estado `PENDING_PAYMENT`, con el total calculado, **todo en una misma transacción**. Las reservas se hacen siempre en el mismo orden (producto, bodega) para evitar interbloqueos.
+  3. **Fase de reserva (transacción):** solo si todas las líneas son válidas, el sistema reserva el stock de cada una y crea el pedido en estado `PENDING_PAYMENT`, con el total calculado y una **copia de la dirección de entrega** elegida (RN-64), **todo en una misma transacción**. Las reservas se hacen siempre en el mismo orden (producto, bodega) para evitar interbloqueos.
   4. Confirmada la transacción, el sistema vacía el carrito.
   5. El sistema responde `201` con el pedido.
 - **Flujos alternativos:**
   - 1a. Carrito vacío → `400`.
+  - 1b. Comprador con estado comercial `RESTRICTED` → `403`; no se toca el carrito (RN-63).
+  - 1c. `addressIndex` que no es un entero o no corresponde a ninguna dirección → `400`.
   - 2a. Producto no publicado o sin stock suficiente → `400`; **no se reserva nada** (por eso la validación va primero).
   - 3a. Otro pedido simultáneo se llevó el stock entre la fase 2 y la 3 → `400`; la transacción se deshace completa (**ninguna reserva parcial**, no se crea el pedido) y el carrito se conserva.
-- **Postcondiciones:** stock reservado, pedido pendiente de pago, carrito vacío.
+- **Postcondiciones:** stock reservado, pedido pendiente de pago con su dirección de entrega, carrito vacío.
 - **Endpoint:** `POST /api/orders/checkout`
 
 ### CU-26 Pagar pedido
@@ -330,7 +333,7 @@ flowchart LR
 ### CU-27 Consultar pedidos
 - **Actor:** Comprador (solo los suyos), **Vendedor (pedidos que incluyen sus productos)**, Operador Logístico, Supervisor, Administrador.
 - **Flujo principal:** el actor lista pedidos (filtros: estado, comprador, rango de fechas; paginado) o consulta uno por id; el sistema responde `200`.
-- **Vista del vendedor:** la matriz de responsabilidades incluye al vendedor en la gestión de pedidos. Ve solo los pedidos que contienen sus productos, y de cada uno **solo sus líneas** y su subtotal (`sellerSubtotal`): nunca lo que el comprador le compró a otros vendedores.
+- **Vista del vendedor:** la matriz de responsabilidades incluye al vendedor en la gestión de pedidos. Ve solo los pedidos que contienen sus productos, y de cada uno **solo sus líneas** y su subtotal (`sellerSubtotal`): nunca lo que el comprador le compró a otros vendedores, ni la dirección de entrega (RN-65).
 - **Flujos alternativos:** pedido ajeno (comprador) o pedido sin productos del vendedor → `403`; un comprador filtrando por otro comprador → `403`; pedido inexistente → `404`.
 - **Endpoints:** `GET /api/orders`, `GET /api/orders/:id`, `GET /api/orders/buyer/:buyerId`
 

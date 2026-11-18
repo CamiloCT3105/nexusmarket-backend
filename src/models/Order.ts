@@ -1,3 +1,5 @@
+import { Address } from "./Buyer";
+
 export enum OrderStatus {
   PENDING_PAYMENT = "PENDING_PAYMENT",
   PAID = "PAID",
@@ -19,4 +21,6 @@ export interface Order {
   total: number;
   status: OrderStatus;
   createdAt: Date;
+  // Copia de la dirección elegida al confirmar; no existe en pedidos creados antes de guardarla
+  shippingAddress?: Address;
 }

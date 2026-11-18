@@ -93,6 +93,9 @@ Las reglas `RN-xx` son las que el sistema aplica hoy. Varias se desprenden de la
 | RN-41 | Al pasar un pedido a `SHIPPED`, el stock reservado sale del inventario. | Diseño | `OrderService.changeStatus` |
 | RN-42 | El comprador de un pedido es el usuario autenticado, no un dato enviado por el cliente. | Diseño | `OrderController.checkout` |
 | RN-43 | Solo el dueño de un pedido puede pagarlo. | Diseño | `OrderController.pay` |
+| RN-63 | Un comprador con estado comercial `RESTRICTED` no puede confirmar pedidos (el estado comercial es la condición del comprador para realizar compras); su carrito se conserva. | Documento | `OrderService.checkout` |
+| RN-64 | El pedido guarda una **copia** de la dirección de entrega elegida al confirmar (principal por defecto o una adicional); no cambia si el comprador edita sus direcciones después. | Documento / Diseño | `OrderService.checkout` |
+| RN-65 | La dirección de entrega la ven el comprador, el operador logístico (quien despacha), el supervisor y el administrador; el vendedor no la recibe. | Diseño | `OrderService` (`sellerView`) |
 
 ### Facturación
 
