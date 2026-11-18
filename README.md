@@ -11,6 +11,7 @@ Proyecto académico desarrollado con **desarrollo asistido por IA (vibe coding)*
 - [Instalación y ejecución](#instalación-y-ejecución)
 - [Variables de entorno](#variables-de-entorno)
 - [Scripts](#scripts)
+- [Despliegue](#despliegue)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Autenticación y uso rápido](#autenticación-y-uso-rápido)
 - [Flujo de negocio](#flujo-de-negocio)
@@ -108,6 +109,11 @@ Si `ADMIN_EMAIL`, `ADMIN_PASSWORD` o `ADMIN_DOCUMENT_NUMBER` no están definidos
 | `npm run db:deploy` | Aplica migraciones pendientes sin crear nuevas (producción). |
 | `npm run db:studio` | Abre Prisma Studio para ver y editar los datos en el navegador. |
 | `npm test` | Ejecuta las pruebas de punta a punta (ver abajo). |
+| `npm run seed:demo` | Carga datos de demostración a través de la API (ver [Despliegue](#despliegue)). |
+
+## Despliegue
+
+La plataforma se publica con planes gratuitos: backend en **Render** (configurado con [`render.yaml`](./render.yaml)), PostgreSQL en **Neon**, MongoDB en **Atlas** y el frontend en **Vercel**. La guía paso a paso, con la carga de datos de demostración y los problemas comunes, está en [`DEPLOY.md`](./DEPLOY.md).
 
 ## Pruebas
 
