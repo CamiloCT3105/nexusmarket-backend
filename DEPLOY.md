@@ -1,111 +1,116 @@
-# Despliegue de NexusMarket
+# Guía de despliegue
 
-Guía para publicar la plataforma completa con planes **gratuitos y sin tarjeta**:
+Este documento describe cómo publicar NexusMarket completo utilizando servicios con plan gratuito, sin necesidad de tarjeta de crédito.
 
-| Pieza | Servicio | Qué aloja |
+| Componente | Servicio | Contenido |
 |---|---|---|
-| PostgreSQL | [Neon](https://neon.tech) | Usuarios, pedidos, inventario, facturas, envíos, devoluciones |
+| PostgreSQL | [Neon](https://neon.tech) | Usuarios, pedidos, inventario, facturas, envíos y devoluciones |
 | MongoDB | [MongoDB Atlas](https://www.mongodb.com/atlas) (M0) | Catálogo, carritos y bitácora de movimientos |
-| Backend (esta API) | [Render](https://render.com) | Node.js, configurado con [`render.yaml`](./render.yaml) |
-| Frontend | [Vercel](https://vercel.com) | El repositorio [`nexusmarket-frontend`](https://github.com/CamiloCT3105/nexusmarket-frontend), configurado con su `vercel.json` |
+| API | [Render](https://render.com) | Este repositorio, configurado con [`render.yaml`](./render.yaml) |
+| Frontend | [Vercel](https://vercel.com) | Repositorio [`nexusmarket-frontend`](https://github.com/CamiloCT3105/nexusmarket-frontend), configurado con su `vercel.json` |
 
-Todo en la región **Este de EE. UU. (Virginia)** para que las bases y la API estén cerca entre sí. Tiempo estimado: 30–40 minutos.
+Se recomienda ubicar todos los servicios en la región Este de EE. UU. (Virginia) para reducir la latencia entre la API y las bases de datos. El proceso completo toma entre 30 y 40 minutos.
 
-> **Importante:** las contraseñas y cadenas de conexión se escriben **solo en los paneles** de cada servicio. Nunca en el repositorio (es público) ni en mensajes.
-
----
+> Las contraseñas y cadenas de conexión deben registrarse únicamente en los paneles de cada servicio, nunca en el repositorio.
 
 ## 1. PostgreSQL en Neon
 
-1. Crea una cuenta en Neon (puedes entrar con GitHub).
-2. **New project** → nombre `nexusmarket`, PostgreSQL **17**, región **AWS US East (N. Virginia)**.
-3. En el panel del proyecto, **Connect** → desactiva **Connection pooling** (las migraciones de Prisma necesitan la conexión directa) → copia la cadena. Tiene esta forma:
+1. Crear una cuenta en Neon.
+2. Crear un proyecto llamado `nexusmarket` con PostgreSQL 17 en la región AWS US East (N. Virginia).
+3. En el panel del proyecto, abrir **Connect**, desactivar **Connection pooling** y copiar la cadena de conexión. Las migraciones de Prisma requieren la conexión directa. La cadena tiene esta forma:
 
    ```
    postgresql://usuario:clave@ep-xxxx.us-east-1.aws.neon.tech/neondb?sslmode=require
    ```
 
-   Guárdala: es la variable `DATABASE_URL`.
+   Este valor corresponde a la variable `DATABASE_URL`.
 
 ## 2. MongoDB en Atlas
 
-1. Crea una cuenta en MongoDB Atlas.
-2. **Create cluster** → plan **M0 (Free)**, proveedor **AWS**, región **N. Virginia (us-east-1)**, nombre `nexusmarket`.
-3. **Database Access** → **Add new database user** → usuario `nexus`, contraseña generada (cópiala), rol *Read and write to any database*.
-4. **Network Access** → **Add IP address** → **Allow access from anywhere** (`0.0.0.0/0`). Render gratuito no tiene IP fija; la base sigue protegida por usuario y contraseña.
-5. **Connect** → **Drivers** → copia la cadena `mongodb+srv://…`, reemplaza `<db_password>` por la contraseña del paso 3 y agrega el nombre de la base **antes** del `?`:
+1. Crear una cuenta en MongoDB Atlas.
+2. Crear un clúster M0 (gratuito) en AWS, región N. Virginia (us-east-1), con el nombre `nexusmarket`.
+3. En **Database & Network Access**, crear un usuario de base de datos con contraseña autogenerada y el rol *Read and write to any database*.
+4. En la lista de acceso por IP, agregar `0.0.0.0/0` (*Allow access from anywhere*). El plan gratuito de Render no tiene una IP fija; la base sigue protegida por usuario y contraseña.
+5. En **Connect → Drivers**, copiar la cadena `mongodb+srv://…`, reemplazar `<db_password>` por la contraseña del usuario y agregar el nombre de la base antes del signo `?`:
 
    ```
-   mongodb+srv://nexus:clave@nexusmarket.xxxxx.mongodb.net/nexusmarket?retryWrites=true&w=majority
+   mongodb+srv://usuario:clave@nexusmarket.xxxxx.mongodb.net/nexusmarket?retryWrites=true&w=majority
    ```
 
-   Es la variable `MONGO_URL`.
+   Este valor corresponde a la variable `MONGO_URL`.
 
-## 3. Backend en Render
+## 3. API en Render
 
-1. Crea una cuenta en Render con GitHub y autoriza el acceso al repositorio `nexusmarket-backend`.
-2. **New** → **Blueprint** → elige el repositorio. Render lee `render.yaml` y propone el servicio `nexusmarket-api` (plan Free).
-3. Completa las variables que pide:
+1. Crear una cuenta en Render y autorizar el acceso al repositorio `nexusmarket-backend`.
+2. Seleccionar **New → Blueprint** y elegir el repositorio. Render lee `render.yaml` y propone el servicio `nexusmarket-api` en el plan gratuito.
+3. Completar las variables solicitadas:
 
    | Variable | Valor |
    |---|---|
-   | `DATABASE_URL` | La cadena de Neon (paso 1) |
-   | `MONGO_URL` | La cadena de Atlas (paso 2) |
-   | `CORS_ORIGIN` | La URL del frontend. Si aún no la tienes, pon `https://nexusmarket.vercel.app` y la corriges en el paso 5 |
+   | `DATABASE_URL` | Cadena de Neon (paso 1) |
+   | `MONGO_URL` | Cadena de Atlas (paso 2) |
+   | `CORS_ORIGIN` | URL del frontend. Si aún no se conoce, puede usarse `https://nexusmarket.vercel.app` y corregirse en el paso 5. |
    | `ADMIN_EMAIL` | Correo del administrador inicial |
-   | `ADMIN_PASSWORD` | Contraseña **fuerte** del administrador (mínimo 8 caracteres; la API será pública) |
+   | `ADMIN_PASSWORD` | Contraseña robusta del administrador (mínimo 8 caracteres) |
    | `ADMIN_DOCUMENT_NUMBER` | Documento del administrador (5 a 20 letras, números o guiones) |
 
-   `JWT_SECRET` lo genera Render solo; `NODE_ENV`, `NODE_VERSION`, `TRUST_PROXY` y la duración del token ya vienen en el blueprint.
-4. **Apply**. El primer despliegue tarda unos minutos: instala, aplica las migraciones en Neon, compila y arranca. Al arrancar crea el administrador.
-5. Comprueba que responde: abre `https://nexusmarket-api.onrender.com/health` (o la URL que muestre Render) → debe decir `{"status":"ok"}`.
+   Render genera `JWT_SECRET` automáticamente. `NODE_ENV`, `NODE_VERSION`, `TRUST_PROXY` y la vigencia del token ya están definidos en el blueprint.
+4. Confirmar con **Apply**. El primer despliegue instala dependencias, aplica las migraciones en Neon, compila e inicia el servicio, que crea el administrador al arrancar.
+5. Verificar que `https://nexusmarket-api.onrender.com/health` (o la URL asignada por Render) responda `{"status":"ok"}`.
 
 ## 4. Frontend en Vercel
 
-1. Crea una cuenta en Vercel con GitHub.
-2. **Add New** → **Project** → importa `nexusmarket-frontend`. Vercel detecta Vite y usa `vercel.json`.
-3. En **Environment Variables** agrega `VITE_API_URL` = la URL de Render del paso 3, **sin barra final** (por ejemplo `https://nexusmarket-api.onrender.com`).
-4. **Deploy**. Al terminar, copia el dominio de producción (por ejemplo `https://nexusmarket.vercel.app`).
+1. Crear una cuenta en Vercel e importar el repositorio `nexusmarket-frontend` desde **Add New → Project**. Vercel detecta Vite y aplica la configuración de `vercel.json`.
+2. En **Environment Variables**, definir `VITE_API_URL` con la URL de Render, sin barra final (por ejemplo, `https://nexusmarket-api.onrender.com`).
+3. Ejecutar **Deploy** y anotar el dominio de producción asignado.
 
-## 5. Conectar el frontend con la API (CORS)
+## 5. Conexión entre frontend y API (CORS)
 
-En Render → servicio `nexusmarket-api` → **Environment** → cambia `CORS_ORIGIN` al dominio exacto de Vercel (con `https://`, sin barra final) → **Save changes**. Render redespliega solo.
+En Render, dentro del servicio `nexusmarket-api`, abrir **Environment** y asignar a `CORS_ORIGIN` el dominio exacto de Vercel, con `https://` y sin barra final. Al guardar, Render vuelve a desplegar el servicio.
 
-Para permitir más de un origen, sepáralos con coma: `https://nexusmarket.vercel.app,http://localhost:5173`. Las vistas previas de Vercel tienen otra URL; si quieres probarlas, agrégalas igual.
+Para autorizar varios orígenes, se separan con comas: `https://nexusmarket.vercel.app,http://localhost:5173`.
 
-## 6. Cargar los datos de demostración
+## 6. Datos de demostración
 
-Desde tu computador, en la carpeta de este repositorio (con `npm install` hecho), en PowerShell:
+Desde una copia local de este repositorio, con las dependencias instaladas, ejecutar en PowerShell:
 
 ```powershell
 $env:SEED_API_URL = "https://nexusmarket-api.onrender.com"
-$env:SEED_ADMIN_EMAIL = "<ADMIN_EMAIL de Render>"
-$env:SEED_ADMIN_PASSWORD = "<ADMIN_PASSWORD de Render>"
+$env:SEED_ADMIN_EMAIL = "<ADMIN_EMAIL configurado en Render>"
+$env:SEED_ADMIN_PASSWORD = "<ADMIN_PASSWORD configurado en Render>"
 $env:SEED_DEMO_PASSWORD = "<contraseña para los usuarios de demostración>"
 npm run seed:demo
 ```
 
-El script espera a que la API despierte, carga todo a través de la API (respetando las reglas de negocio) y muestra los usuarios creados. Si ya hay datos de demostración, no modifica nada. Detalle de lo que crea: encabezado de [`scripts/seed-demo.mjs`](./scripts/seed-demo.mjs). Los productos llevan fotos de Wikimedia Commons; autores y licencias en [`scripts/CREDITOS-IMAGENES.md`](./scripts/CREDITOS-IMAGENES.md).
+El script espera a que la API esté disponible y carga los datos a través de ella, de modo que se aplican todas las reglas de negocio. Si los datos de demostración ya existen, no realiza cambios. El contenido detallado se describe en el encabezado de [`scripts/seed-demo.mjs`](./scripts/seed-demo.mjs), y los créditos de las fotos de producto en [`scripts/CREDITOS-IMAGENES.md`](./scripts/CREDITOS-IMAGENES.md).
 
-Usuarios (todos con `SEED_DEMO_PASSWORD`): `laura@demo.test` y `carlos@demo.test` (compradores), `nova@demo.test`, `casaverde@demo.test`, `paginas@demo.test` (vendedores), `pendiente@demo.test` (vendedor por habilitar), `logistica@demo.test` (operador logístico) y `supervisor@demo.test`.
+Usuarios creados (todos con la contraseña definida en `SEED_DEMO_PASSWORD`):
 
-## 7. Antes de una presentación
+| Rol | Usuarios |
+|---|---|
+| Compradores | `laura@demo.test`, `carlos@demo.test` |
+| Vendedores | `nova@demo.test`, `casaverde@demo.test`, `paginas@demo.test` |
+| Vendedor pendiente de habilitación | `pendiente@demo.test` |
+| Operador logístico | `logistica@demo.test` |
+| Supervisor | `supervisor@demo.test` |
 
-- **Despierta la API** 2–3 minutos antes: el plan gratuito de Render la duerme tras 15 minutos sin uso y tarda cerca de un minuto en volver. Abre `/health` o entra al frontend (muestra un aviso mientras despierta).
-- Opcional: un monitor gratuito (por ejemplo UptimeRobot) que llame a `/health` cada 10 minutos la mantiene despierta; cabe en las 750 horas mensuales gratuitas.
+## 7. Recomendaciones para demostraciones
+
+- El plan gratuito de Render suspende la API tras 15 minutos sin actividad, y reactivarla toma cerca de un minuto. Conviene abrir `/health` unos minutos antes de una presentación.
+- Un monitor externo (por ejemplo, UptimeRobot) que consulte `/health` cada 10 minutos mantiene la API activa dentro de las 750 horas mensuales del plan.
 
 ## Actualizaciones
 
-Cada merge a `main` se publica solo: Render redespliega el backend (y aplica migraciones nuevas) y Vercel el frontend. Si cambias variables de entorno, Render redespliega al guardarlas; en Vercel hay que **Redeploy** porque `VITE_API_URL` se fija al compilar.
+Cada merge a `main` se publica automáticamente: Render despliega la API y aplica las migraciones nuevas, y Vercel despliega el frontend. Un cambio en las variables de Render provoca un nuevo despliegue; en Vercel es necesario ejecutar **Redeploy**, porque `VITE_API_URL` se fija durante la compilación.
 
-## Problemas comunes
+## Solución de problemas
 
 | Síntoma | Causa probable |
 |---|---|
-| El despliegue de Render falla en `npm run build` con tipos de Express | Se quitó `--include=dev` del comando de build (con `NODE_ENV=production`, `npm ci` omite TypeScript). |
-| `No se pudo conectar a PostgreSQL` | `DATABASE_URL` con la conexión *pooled* o sin `?sslmode=require`. |
-| `No se pudo conectar a MongoDB` | Falta `0.0.0.0/0` en Network Access de Atlas, contraseña con caracteres especiales sin codificar, o falta `/nexusmarket` en la URL. |
-| El navegador muestra error de CORS | `CORS_ORIGIN` no coincide exactamente con el dominio de Vercel (revisa `https://` y la barra final). |
-| `429 Demasiados intentos fallidos…` al iniciar sesión | Más de 10 claves erróneas para esa cuenta en 15 minutos (o 100 desde la misma red). Espera los minutos que indica o redespliega el servicio, que reinicia el conteo. |
-| El login tarda casi un minuto | La API estaba dormida (plan gratuito). Es normal la primera vez. |
-| El frontend llama a `localhost:3000` | Falta `VITE_API_URL` en Vercel o no se hizo **Redeploy** después de agregarla. |
+| La compilación en Render falla por tipos de Express | Se eliminó `--include=dev` del comando de compilación; con `NODE_ENV=production`, `npm ci` omite TypeScript. |
+| `No se pudo conectar a PostgreSQL` | `DATABASE_URL` usa la conexión con *pooling* o le falta `?sslmode=require`. |
+| `No se pudo conectar a MongoDB` | Falta `0.0.0.0/0` en la lista de acceso de Atlas, la contraseña contiene caracteres especiales sin codificar o falta `/nexusmarket` en la URL. |
+| Error de CORS en el navegador | `CORS_ORIGIN` no coincide exactamente con el dominio de Vercel. |
+| Respuesta `429` al iniciar sesión | Se superaron 10 intentos fallidos para la cuenta en 15 minutos (o 100 desde la misma red). El contador se reinicia al cumplirse el plazo o con un nuevo despliegue. |
+| El inicio de sesión tarda cerca de un minuto | La API estaba suspendida por inactividad. |
+| El frontend intenta conectarse a `localhost:3000` | Falta `VITE_API_URL` en Vercel, o no se ejecutó **Redeploy** después de definirla. |
