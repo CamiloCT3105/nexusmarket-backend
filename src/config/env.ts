@@ -35,7 +35,7 @@ function positiveInt(name: string, fallback: number): number {
   return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-// Proxies de confianza delante de la API (Render pone uno). Con esto Express toma la IP real del
+// Proxies de confianza delante de la API (en Render son 3 saltos). Con esto Express toma la IP real del
 // cliente desde X-Forwarded-For; sin proxy debe quedar en false, o cualquiera podría falsear su IP.
 // Acepta un número de saltos ("1"), "true"/"false" o una lista de IP/subredes (formato de Express).
 function trustProxy(): boolean | number | string {

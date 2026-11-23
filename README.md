@@ -1,5 +1,7 @@
 # NexusMarket — Backend
 
+[![CI](https://github.com/CamiloCT3105/nexusmarket-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/CamiloCT3105/nexusmarket-backend/actions/workflows/ci.yml)
+
 API REST de **NexusMarket**, un marketplace que conecta compradores y vendedores. Cubre el ciclo completo de una compra (catálogo, inventario, carrito, pedido, pago, facturación, logística, devoluciones y reembolsos), con control de acceso por roles y reportes administrativos.
 
 Proyecto académico desarrollado con **desarrollo asistido por IA (vibe coding)**. El documento de negocio, los casos de uso, las decisiones técnicas y la bitácora del proceso están en la carpeta [`SDD/`](./SDD).
@@ -91,7 +93,7 @@ MongoDB se publica en el puerto **27018** del equipo (no en el 27017 habitual) p
 | `CORS_ORIGIN` | No | Frontends que pueden llamar a la API desde el navegador, separados por coma. | `http://localhost:5173` (Vite) |
 | `DATABASE_URL` | **Sí** | Conexión a PostgreSQL. Si falta, el servidor no arranca. | ver `.env.example` |
 | `MONGO_URL` | **Sí** | Conexión a MongoDB. Si falta, el servidor no arranca. | ver `.env.example` |
-| `TRUST_PROXY` | No | Proxies de confianza delante de la API, para conocer la IP real del cliente. `1` en Render; vacío en local. | vacío (ninguno) |
+| `TRUST_PROXY` | No | Proxies de confianza delante de la API, para conocer la IP real del cliente. `3` en Render (Cloudflare y su balanceador van delante); vacío en local. | vacío (ninguno) |
 | `RATE_LIMIT_LOGIN_PER_ACCOUNT` | No | Intentos fallidos de login por IP y correo en 15 minutos. | `10` |
 | `RATE_LIMIT_LOGIN_PER_IP` | No | Intentos fallidos de login por IP en 15 minutos. | `100` |
 | `RATE_LIMIT_REGISTER_PER_IP` | No | Cuentas nuevas por IP en una hora. | `30` |
@@ -131,6 +133,13 @@ Corre más de 300 comprobaciones de punta a punta contra un servidor real y base
 - Usa **bases de prueba separadas** (`nexusmarket_e2e`), que se vacían al empezar: tus datos de desarrollo no se tocan. El runner se niega a correr si el nombre de la base no contiene `e2e` o `test`.
 - Cualquier error `500` inesperado en el servidor cuenta como fallo.
 - Las suites están en [`tests/e2e/`](./tests/e2e).
+
+**Integración continua.** Cada PR y cada cambio en `main` corre en GitHub Actions ([`ci.yml`](./.github/workflows/ci.yml)) con PostgreSQL y MongoDB desechables:
+
+1. Compilación con el mismo comando que Render (`npm run build`).
+2. Migraciones aplicadas desde cero y comparadas con `schema.prisma`: si alguien cambia el esquema sin crear la migración, falla.
+3. `npm test` completo.
+4. `npm run seed:demo` dos veces: los datos de demostración se cargan y la segunda vez no modifican nada.
 
 ## Estructura del proyecto
 
