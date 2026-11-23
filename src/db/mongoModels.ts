@@ -17,6 +17,7 @@ export interface ProductDocument {
   type: string;
   variants: Array<{ id: string; name: string; value: string }>;
   status: string;
+  imageUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +28,7 @@ const productSchema = new Schema<ProductDocument>(
     sellerId: { type: String, required: true },
     name: { type: String, required: true },
     description: { type: String, default: "" },
+    imageUrl: { type: String }, // opcional: los productos anteriores no la tienen
     price: { type: Schema.Types.Decimal128, required: true },
     type: { type: String, required: true },
     // Flexible a propósito: cada producto puede tener variantes distintas (color, talla, formato...)

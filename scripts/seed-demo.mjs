@@ -114,9 +114,26 @@ async function main() {
     [paginas, "Cuaderno de bocetos A4", "120 hojas de papel libre de ácido, 120 g/m².", 32500, [], 60],
     [paginas, "Agenda 2027 de tapa dura", "Semana a la vista, papel de 90 g/m² y cinta separadora.", 45900, [], 35],
   ];
+  // Fotos de Wikimedia Commons con licencia libre; autores y licencias en scripts/CREDITOS-IMAGENES.md
+  const photos = {
+    "Audífonos inalámbricos Aura": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/40/Headphones_1.jpg/960px-Headphones_1.jpg",
+    "Teclado mecánico Pulse 75%": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7f/Beautiful_Mechanical_Keyboard.jpg/960px-Beautiful_Mechanical_Keyboard.jpg",
+    "Mouse ergonómico Glide": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/Delux_M618_vertical_mouse.jpg/960px-Delux_M618_vertical_mouse.jpg",
+    "Monitor curvo 27\" Horizon": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/ASUS_curved_monitor_20170603.jpg/960px-ASUS_curved_monitor_20170603.jpg",
+    "Parlante portátil Echo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9d/UE_Boom_2.jpg/960px-UE_Boom_2.jpg",
+    "Cámara web Lumen 4K": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/55/Webcam_01.jpg/960px-Webcam_01.jpg",
+    "Lámpara de mesa Nórdica": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Bedside_Table_Lamp.jpg/960px-Bedside_Table_Lamp.jpg",
+    "Set de 4 tazas de cerámica": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1c/Handmade_Ceramic_Mugs_%28made_and_photographed_by_Liina_Potter%29.jpg/960px-Handmade_Ceramic_Mugs_%28made_and_photographed_by_Liina_Potter%29.jpg",
+    "Planta Monstera en maceta": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4b/HK_SW_Leaves_with_holes.JPG/960px-HK_SW_Leaves_with_holes.JPG",
+    "Cojín de terciopelo": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/74/Batik_Kawung_Cushion.jpg/960px-Batik_Kawung_Cushion.jpg",
+    "Difusor de aromas Calma": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/Aroma_Diffuser.jpg/960px-Aroma_Diffuser.jpg",
+    "Cien años de soledad (edición ilustrada)": "https://upload.wikimedia.org/wikipedia/commons/a/a1/Cien_a%C3%B1os_de_soledad.png",
+    "Cuaderno de bocetos A4": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/77/Sketchbook%2C_Sketchbook_of_twenty-one_leaves_of_pencil_drawings%2C_1885%E2%80%9386_%28CH_18418323%29.jpg/960px-Sketchbook%2C_Sketchbook_of_twenty-one_leaves_of_pencil_drawings%2C_1885%E2%80%9386_%28CH_18418323%29.jpg",
+    "Agenda 2027 de tapa dura": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/Agenda_et_crayon.jpg/960px-Agenda_et_crayon.jpg",
+  };
   const products = {};
   for (const [owner, name, description, price, variants, stock] of catalog) {
-    const product = await call("POST", "/api/products", { token: owner.token, body: { name, description, price, type: "PHYSICAL" } });
+    const product = await call("POST", "/api/products", { token: owner.token, body: { name, description, price, type: "PHYSICAL", imageUrl: photos[name] } });
     for (const [variantName, value] of variants) {
       await call("PATCH", `/api/products/${product.id}/variants`, { token: owner.token, body: { name: variantName, value } });
     }

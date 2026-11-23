@@ -45,11 +45,12 @@ export const ProductController = {
 
   async create(req: Request, res: Response): Promise<void> {
     const authUser = getAuthUser(res);
-    const { name, description, price, type } = req.body as {
+    const { name, description, price, type, imageUrl } = req.body as {
       name: string;
       description: string;
       price: number;
       type: ProductType;
+      imageUrl?: unknown;
     };
     // El vendedor dueño es SIEMPRE quien está autenticado, nunca lo que diga el body
     const product = await ProductService.createProduct({
@@ -58,6 +59,7 @@ export const ProductController = {
       description,
       price,
       type,
+      imageUrl,
     });
     res.status(201).json(product);
   },
@@ -76,6 +78,13 @@ export const ProductController = {
     const product = await getManageableProduct(req, res);
     const { name, value } = req.body as { name: string; value: string };
     const updated = await ProductService.addVariant(product.id, name, value);
+    res.status(200).json(updated);
+  },
+
+  async updateImage(req: Request, res: Response): Promise<void> {
+    const product = await getManageableProduct(req, res);
+    const { imageUrl } = (req.body ?? {}) as { imageUrl?: unknown };
+    const updated = await ProductService.updateImage(product.id, imageUrl);
     res.status(200).json(updated);
   },
 

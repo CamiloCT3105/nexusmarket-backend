@@ -16,6 +16,7 @@ function toProduct(doc: ProductDocument): Product {
     type: doc.type as ProductType,
     variants: doc.variants.map((v): Variant => ({ id: v.id, name: v.name, value: v.value })),
     status: doc.status as ProductStatus,
+    ...(doc.imageUrl ? { imageUrl: doc.imageUrl } : {}),
   };
 }
 
@@ -99,6 +100,7 @@ export const ProductRepository = {
       type: product.type,
       variants: product.variants,
       status: product.status,
+      ...(product.imageUrl ? { imageUrl: product.imageUrl } : {}),
     });
     return toProduct(doc.toObject());
   },
@@ -110,6 +112,13 @@ export const ProductRepository = {
       { $push: { variants: variant } },
       { new: true }
     ).lean<ProductDocument>();
+    return doc ? toProduct(doc) : undefined;
+  },
+
+  // Cambia o quita (null) la foto del producto
+  async updateImage(id: string, imageUrl: string | null): Promise<Product | undefined> {
+    const update = imageUrl === null ? { $unset: { imageUrl: 1 } } : { $set: { imageUrl } };
+    const doc = await ProductModel.findByIdAndUpdate(id, update, { new: true }).lean<ProductDocument>();
     return doc ? toProduct(doc) : undefined;
   },
 

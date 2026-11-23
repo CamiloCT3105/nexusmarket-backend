@@ -284,6 +284,7 @@ Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario
 | GET | `/seller/:sellerId` | Autenticado |
 | PATCH | `/:id/variants` | Vendedor (propio), Admin |
 | PATCH | `/:id/status` | Vendedor (propio), Admin |
+| PATCH | `/:id/image` | Vendedor (propio), Admin — `{ "imageUrl": "https://…" }`, o `null` para quitarla |
 
 ### Bodegas — `/api/warehouses`
 
@@ -432,6 +433,8 @@ La lista completa está en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-li
 - [x] Documento de identidad único, operador logístico en inventario y pedidos visibles para el vendedor (brechas con la especificación)
 - [x] Dirección de entrega en el pedido y estado comercial que bloquea compras (brechas con la especificación)
 - [x] Frontend en React + TypeScript ([`nexusmarket-frontend`](https://github.com/CamiloCT3105/nexusmarket-frontend))
+- [x] Foto de producto por URL `https` (con fotos de demostración de Wikimedia Commons, ver [créditos](./scripts/CREDITOS-IMAGENES.md))
+- [ ] Subida de fotos a un almacenamiento de objetos (S3 o Cloudinary)
 - [ ] Productos digitales con entrega inmediata tras el pago
 
 ## Licencia

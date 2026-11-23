@@ -208,11 +208,11 @@ flowchart LR
 - **Actor:** Vendedor
 - **Precondiciones:** el vendedor tiene perfil de vendedor (CU-10).
 - **Flujo principal:**
-  1. El vendedor envía nombre, descripción, precio y tipo (`PHYSICAL` o `DIGITAL`).
+  1. El vendedor envía nombre, descripción, precio, tipo (`PHYSICAL` o `DIGITAL`) y, opcionalmente, la URL de una foto (RN-68).
   2. El sistema toma el `sellerId` **del token**, ignorando cualquiera que venga en el cuerpo.
   3. El sistema valida que el vendedor exista y que el precio sea mayor a cero.
   4. El sistema crea el producto en estado `PUBLISHED`, sin variantes, y responde `201`.
-- **Flujos alternativos:** nombre vacío, precio ≤ 0, precio con más de dos decimales o tipo distinto de `PHYSICAL`/`DIGITAL` → `400`; sin perfil de vendedor → `404`; el rol no es `SELLER` → `403`.
+- **Flujos alternativos:** nombre vacío, precio ≤ 0, precio con más de dos decimales, tipo distinto de `PHYSICAL`/`DIGITAL` o foto que no sea una URL `https` válida → `400`; sin perfil de vendedor → `404`; el rol no es `SELLER` → `403`.
 - **Endpoint:** `POST /api/products`
 
 ### CU-15 Agregar variante a un producto
@@ -229,6 +229,14 @@ flowchart LR
 - **Flujos alternativos:** estado inválido → `400`; producto ajeno (vendedor) → `403`; producto inexistente → `404`.
 - **Postcondiciones:** solo los productos `PUBLISHED` pueden agregarse al carrito o comprarse.
 - **Endpoint:** `PATCH /api/products/:id/status`
+
+### CU-16b Cambiar o quitar la foto de un producto
+- **Actor:** Vendedor (solo sus productos) o Administrador
+- **Precondiciones:** el producto existe.
+- **Flujo principal:** el actor envía `imageUrl` con una URL `https`; el sistema la valida (RN-68), la guarda y responde `200` con el producto. Con `null` o una cadena vacía, la foto se quita.
+- **Flujos alternativos:** falta `imageUrl`, o no es una URL `https` válida → `400`; producto ajeno (vendedor) o rol sin permiso → `403`; producto inexistente → `404`.
+- **Postcondiciones:** todos los que pueden ver el producto (catálogo, carrito, pedidos) reciben la foto nueva; sin foto, el frontend muestra una ilustración.
+- **Endpoint:** `PATCH /api/products/:id/image`
 
 ### CU-17 Consultar el catálogo
 - **Actor:** cualquier usuario autenticado

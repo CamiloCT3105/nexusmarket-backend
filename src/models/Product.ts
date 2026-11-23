@@ -24,4 +24,5 @@ export interface Product {
   type: ProductType;
   variants: Variant[];
   status: ProductStatus;
+  imageUrl?: string; // foto principal: URL https pública (RN-68); sin ella el frontend muestra un marcador
 }
