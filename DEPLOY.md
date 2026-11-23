@@ -85,7 +85,7 @@ $env:SEED_DEMO_PASSWORD = "<contraseña para los usuarios de demostración>"
 npm run seed:demo
 ```
 
-El script espera a que la API despierte, carga todo a través de la API (respetando las reglas de negocio) y muestra los usuarios creados. Si ya hay datos de demostración, no modifica nada. Detalle de lo que crea: encabezado de [`scripts/seed-demo.mjs`](./scripts/seed-demo.mjs).
+El script espera a que la API despierte, carga todo a través de la API (respetando las reglas de negocio) y muestra los usuarios creados. Si ya hay datos de demostración, no modifica nada. Detalle de lo que crea: encabezado de [`scripts/seed-demo.mjs`](./scripts/seed-demo.mjs). Los productos llevan fotos de Wikimedia Commons; autores y licencias en [`scripts/CREDITOS-IMAGENES.md`](./scripts/CREDITOS-IMAGENES.md).
 
 Usuarios (todos con `SEED_DEMO_PASSWORD`): `laura@demo.test` y `carlos@demo.test` (compradores), `nova@demo.test`, `casaverde@demo.test`, `paginas@demo.test` (vendedores), `pendiente@demo.test` (vendedor por habilitar), `logistica@demo.test` (operador logístico) y `supervisor@demo.test`.
 

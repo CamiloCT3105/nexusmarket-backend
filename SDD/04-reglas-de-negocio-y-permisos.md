@@ -58,6 +58,7 @@ Las reglas `RN-xx` son las que el sistema aplica hoy. Varias se desprenden de la
 | RN-19 | Un producto nuevo nace en estado `PUBLISHED`. | Diseño | `ProductService.createProduct` |
 | RN-20 | El dueño del producto es quien lo crea (se toma del token). | Diseño | `ProductController.create` |
 | RN-21 | Un vendedor solo modifica sus propios productos; el Administrador puede modificar cualquiera. | Diseño | `ProductController` (`canManageProduct`) |
+| RN-68 | La foto de un producto es opcional y es una URL `https` pública (sin usuario ni contraseña, máximo 2048 caracteres); vacía o `null` significa sin foto. La cambia el vendedor dueño o el Administrador (por ejemplo, para retirar una imagen inapropiada). | Diseño | `ProductService` (`normalizeImageUrl`), `ProductController.updateImage` |
 
 ### Inventario
 

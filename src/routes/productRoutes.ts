@@ -11,6 +11,7 @@ router.get("/", ProductController.list);
 router.get("/seller/:sellerId", ProductController.getBySeller);
 router.get("/:id", ProductController.getById);
 router.patch("/:id/variants", authorize(UserRole.SELLER, UserRole.ADMIN), ProductController.addVariant);
+router.patch("/:id/image", authorize(UserRole.SELLER, UserRole.ADMIN), ProductController.updateImage);
 router.patch("/:id/status", authorize(UserRole.SELLER, UserRole.ADMIN), ProductController.changeStatus);
 
 export default router;

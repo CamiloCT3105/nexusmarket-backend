@@ -13,6 +13,7 @@ type CreateProductInput = {
   description: string;
   price: number;
   type: ProductType;
+  imageUrl?: unknown;
 };
 
 function isNonEmptyString(value: unknown): value is string {
@@ -27,6 +28,37 @@ function assertValidPrice(price: unknown): asserts price is number {
   if (Number(price.toFixed(2)) !== price) {
     throw new ValidationError("El precio admite como máximo dos decimales.");
   }
+}
+
+const MAX_IMAGE_URL_LENGTH = 2048;
+
+// Foto del producto (RN-68): una URL https pública. No se guardan archivos en el servidor (el disco de
+// Render gratuito se borra en cada despliegue); la imagen vive en un servicio externo.
+// Devuelve la URL normalizada, o null si viene vacía (sin foto).
+function normalizeImageUrl(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") {
+    throw new ValidationError("La URL de la imagen debe ser texto.");
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  if (trimmed.length > MAX_IMAGE_URL_LENGTH) {
+    throw new ValidationError(`La URL de la imagen admite como máximo ${MAX_IMAGE_URL_LENGTH} caracteres.`);
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new ValidationError("La URL de la imagen no es válida.");
+  }
+  // Solo https: el frontend se sirve por https y el navegador bloquearía imágenes http (contenido mixto)
+  if (url.protocol !== "https:") {
+    throw new ValidationError("La URL de la imagen debe empezar por https://.");
+  }
+  if (url.username !== "" || url.password !== "") {
+    throw new ValidationError("La URL de la imagen no puede incluir usuario ni contraseña.");
+  }
+  return url.toString();
 }
 
 export const ProductService = {
@@ -44,6 +76,8 @@ export const ProductService = {
       );
     }
 
+    const imageUrl = normalizeImageUrl(input.imageUrl);
+
     // Validamos que el vendedor exista antes de crear el producto
     await SellerService.getSellerByUserId(input.sellerId);
 
@@ -56,6 +90,7 @@ export const ProductService = {
       type: input.type,
       variants: [],
       status: ProductStatus.PUBLISHED,
+      ...(imageUrl ? { imageUrl } : {}),
     };
 
     return ProductRepository.create(newProduct);
@@ -117,6 +152,18 @@ export const ProductService = {
     };
 
     const updated = await ProductRepository.addVariant(productId, newVariant);
+    if (!updated) {
+      throw new NotFoundError("Producto no encontrado.");
+    }
+    return updated;
+  },
+
+  // Cambia la foto; una URL vacía o null la quita
+  async updateImage(productId: string, imageUrl: unknown): Promise<Product> {
+    if (imageUrl === undefined) {
+      throw new ValidationError("Envía 'imageUrl' (una URL https, o null para quitar la imagen).");
+    }
+    const updated = await ProductRepository.updateImage(productId, normalizeImageUrl(imageUrl));
     if (!updated) {
       throw new NotFoundError("Producto no encontrado.");
     }

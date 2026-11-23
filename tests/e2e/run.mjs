@@ -213,6 +213,7 @@ async function main() {
   runSuite("Catálogo y carritos", "catalog-carts.mjs", "setup");
   runSuite("Registros simultáneos", "race.mjs");
   runSuite("Documento de identidad, catálogo y listados por rol", "listings.mjs");
+  runSuite("Fotos de producto", "product-images.mjs");
   runSuite("CORS", "cors.mjs");
   await stopServer();
 
