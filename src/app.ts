@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import { env } from "./config/env";
 import { authenticate } from "./middlewares/authenticate";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler";
@@ -20,6 +21,14 @@ import reportRoutes from "./routes/reportRoutes";
 
 const app = express();
 
+// Detrás de un proxy (Render), la IP real del cliente llega en X-Forwarded-For. Los límites de
+// peticiones dependen de esa IP (ver TRUST_PROXY en .env.example).
+app.set("trust proxy", env.trustProxy);
+
+// Encabezados de seguridad HTTP (nosniff, HSTS, sin X-Powered-By, etc.). La API solo responde JSON;
+// la política CORP por defecto no afecta a las peticiones CORS del frontend.
+app.use(helmet());
+
 // CORS: solo los orígenes configurados (CORS_ORIGIN) pueden llamar a la API desde un navegador.
 // La autenticación va en el header Authorization (no en cookies), por eso no se habilitan credenciales.
 app.use(
@@ -31,7 +40,8 @@ app.use(
   })
 );
 
-app.use(express.json());
+// Las peticiones de la API son pequeñas: un cuerpo mayor se rechaza con 413 antes de procesarlo
+app.use(express.json({ limit: "100kb" }));
 
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });

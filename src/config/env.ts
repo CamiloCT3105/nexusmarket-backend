@@ -29,6 +29,22 @@ const corsOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .map((origin) => origin.trim())
   .filter((origin) => origin !== "");
 
+// Número entero positivo desde una variable de entorno; si falta o no es válido, el valor por defecto
+function positiveInt(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+// Proxies de confianza delante de la API (Render pone uno). Con esto Express toma la IP real del
+// cliente desde X-Forwarded-For; sin proxy debe quedar en false, o cualquiera podría falsear su IP.
+// Acepta un número de saltos ("1"), "true"/"false" o una lista de IP/subredes (formato de Express).
+function trustProxy(): boolean | number | string {
+  const raw = (process.env.TRUST_PROXY ?? "").trim();
+  if (raw === "" || raw === "false") return false;
+  if (raw === "true") return true;
+  return /^\d+$/.test(raw) ? Number(raw) : raw;
+}
+
 export const env = {
   databaseUrl,
   corsOrigins,
@@ -40,4 +56,13 @@ export const env = {
   adminEmail: process.env.ADMIN_EMAIL,
   adminPassword: process.env.ADMIN_PASSWORD,
   adminDocumentNumber: process.env.ADMIN_DOCUMENT_NUMBER,
+  trustProxy: trustProxy(),
+  rateLimit: {
+    // Intentos FALLIDOS de login por IP y correo en 15 minutos (frena adivinar la clave de una cuenta)
+    loginPerAccount: positiveInt("RATE_LIMIT_LOGIN_PER_ACCOUNT", 10),
+    // Intentos FALLIDOS de login por IP en 15 minutos, sumando todos los correos (frena barridos)
+    loginPerIp: positiveInt("RATE_LIMIT_LOGIN_PER_IP", 100),
+    // Cuentas nuevas por IP en una hora
+    registerPerIp: positiveInt("RATE_LIMIT_REGISTER_PER_IP", 30),
+  },
 };

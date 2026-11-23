@@ -28,6 +28,8 @@ Las reglas `RN-xx` son las que el sistema aplica hoy. Varias se desprenden de la
 | RN-06 | Un usuario bloqueado no puede iniciar sesión y sus tokens vigentes dejan de funcionar de inmediato. | Diseño | `AuthService.login`, middleware `authenticate` |
 | RN-07 | El rol se lee del estado actual del usuario en cada petición, no del token. | Diseño | middleware `authenticate` |
 | RN-08 | Las contraseñas se guardan como hash `scrypt` con sal; nunca en texto plano. | Diseño | `utils/password.ts` |
+| RN-66 | Los intentos **fallidos** de login se limitan: 10 por IP y correo y 100 por IP en 15 minutos; al superarlos la respuesta es `429` con `Retry-After`. Los inicios de sesión correctos no cuentan. | Diseño | `middlewares/rateLimits.ts`, `authRoutes` |
+| RN-67 | El registro público admite 30 cuentas nuevas por IP en una hora; después responde `429`. | Diseño | `middlewares/rateLimits.ts`, `authRoutes` |
 
 ### Compradores y vendedores
 

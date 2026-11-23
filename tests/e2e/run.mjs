@@ -9,7 +9,8 @@
 // E2E_DATABASE_URL y E2E_MONGO_URL.
 //
 // Pasos: crea la base de prueba si no existe → aplica migraciones → la vacía → compila →
-// arranca el servidor → corre las suites → lo reinicia → comprueba la persistencia.
+// arranca el servidor → corre las suites → lo reinicia → comprueba la persistencia →
+// lo reinicia con límites de peticiones bajos → prueba el endurecimiento.
 
 import { spawn, spawnSync } from "child_process";
 import { mkdtempSync, rmSync } from "fs";
@@ -32,6 +33,15 @@ const ADMIN_EMAIL = "admin@e2e.test";
 const ADMIN_PASSWORD = "AdminE2E12345";
 const CORS_ORIGIN = "http://localhost:5173";
 const TEST_DB = "nexusmarket_e2e";
+
+// Límites de peticiones: las suites normales registran e inician sesión muchas veces desde la misma
+// IP, así que corren con límites altos; la suite de endurecimiento los prueba con límites bajos.
+const RELAXED_LIMITS = {
+  RATE_LIMIT_LOGIN_PER_ACCOUNT: "100000",
+  RATE_LIMIT_LOGIN_PER_IP: "100000",
+  RATE_LIMIT_REGISTER_PER_IP: "100000",
+};
+const STRICT_LIMITS = { RATE_LIMIT_LOGIN_PER_ACCOUNT: "3", RATE_LIMIT_LOGIN_PER_IP: "6", RATE_LIMIT_REGISTER_PER_IP: "2" };
 
 // ─── Configuración de las bases de prueba ──────────────────────────────────────
 
@@ -106,9 +116,10 @@ async function cleanDatabases() {
 }
 
 let server;
-let serverLog = "";
+let serverLog = ""; // salida del servidor actual
+let fullLog = ""; // salida de todos los arranques, para buscar errores inesperados al final
 
-async function startServer() {
+async function startServer(extraEnv = RELAXED_LIMITS) {
   serverLog = "";
   server = spawn(process.execPath, [join(BUILD_DIR, "index.js")], {
     cwd: ROOT,
@@ -123,10 +134,15 @@ async function startServer() {
       DATABASE_URL: PG_URL,
       MONGO_URL,
       CORS_ORIGIN,
+      ...extraEnv,
     },
   });
-  server.stdout.on("data", (chunk) => (serverLog += chunk));
-  server.stderr.on("data", (chunk) => (serverLog += chunk));
+  const collect = (chunk) => {
+    serverLog += chunk;
+    fullLog += chunk;
+  };
+  server.stdout.on("data", collect);
+  server.stderr.on("data", collect);
 
   for (let i = 0; i < 60; i++) {
     if (hasExited(server)) break;
@@ -153,7 +169,7 @@ async function stopServer() {
 
 const results = [];
 
-function runSuite(label, file, mode) {
+function runSuite(label, file, mode, extraEnv = {}) {
   console.log(`\n── ${label}`);
   const args = [join(SUITES, file), ...(mode ? [mode] : [])];
   const result = spawnSync(process.execPath, args, {
@@ -165,6 +181,7 @@ function runSuite(label, file, mode) {
       E2E_ADMIN_PASSWORD: ADMIN_PASSWORD,
       E2E_CORS_ORIGIN: CORS_ORIGIN,
       E2E_STATE_DIR: STATE_DIR,
+      ...extraEnv,
     },
     stdio: "inherit",
   });
@@ -205,8 +222,18 @@ async function main() {
   runSuite("Persistencia de catálogo y carritos", "catalog-carts.mjs", "verify");
   await stopServer();
 
+  step("Reiniciando servidor con límites bajos: endurecimiento de la API");
+  // TRUST_PROXY=loopback: la suite simula clientes distintos enviando X-Forwarded-For desde localhost
+  await startServer({ ...STRICT_LIMITS, TRUST_PROXY: "loopback" });
+  runSuite("Endurecimiento: encabezados, tamaño del cuerpo y límites de peticiones", "hardening.mjs", undefined, {
+    E2E_LIMIT_LOGIN_PER_ACCOUNT: STRICT_LIMITS.RATE_LIMIT_LOGIN_PER_ACCOUNT,
+    E2E_LIMIT_LOGIN_PER_IP: STRICT_LIMITS.RATE_LIMIT_LOGIN_PER_IP,
+    E2E_LIMIT_REGISTER_PER_IP: STRICT_LIMITS.RATE_LIMIT_REGISTER_PER_IP,
+  });
+  await stopServer();
+
   // Un 500 inesperado queda registrado por el errorHandler: también cuenta como fallo
-  const unexpected = serverLog.split("\n").filter((line) => /error/i.test(line));
+  const unexpected = fullLog.split("\n").filter((line) => /error/i.test(line));
   results.push({ label: "Sin errores 500 inesperados en el servidor", ok: unexpected.length === 0 });
   if (unexpected.length > 0) console.log(unexpected.join("\n"));
 }

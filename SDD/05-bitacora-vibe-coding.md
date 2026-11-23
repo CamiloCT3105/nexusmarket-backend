@@ -140,6 +140,9 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 33 | El operador logístico no podía saber a dónde despachar | El pedido no guardaba la dirección de entrega y el operador no tiene acceso al perfil del comprador. | El pedido copia la dirección elegida al confirmar (D-60, RN-64). |
 | 34 | El estado comercial `RESTRICTED` no tenía ningún efecto | Se guardaba, pero ningún flujo lo consultaba, aunque la especificación lo define como la condición para comprar. | El checkout lo valida (RN-63); suite `checkout-address.mjs`. |
 | 35 | El frontend no podía cambiar el estado comercial (`400`) | Enviaba `{ status }` y el backend espera `{ commercialStatus }`. Se detectó al escribir la suite nueva. | Corregido en el frontend y cubierto por una prueba de punta a punta allá. |
+| 36 | Un cuerpo de más de 100 kB respondía `500` y quedaba registrado como error del servidor | El manejador central solo reconocía el JSON mal formado entre los errores de `express.json()`. | Los errores del lector del cuerpo responden con su código `4xx` y un mensaje en español (`413` para el tamaño). |
+| 37 | La verificación de «sin errores 500» del runner solo miraba el último arranque del servidor | Cada reinicio vaciaba el registro acumulado. | Se guarda la salida de todos los arranques y se revisa completa al final. |
+| 38 | Los límites de login romperían las suites que inician sesión cientos de veces desde `localhost` | Todas las peticiones de prueba salen de la misma IP. | Las suites normales corren con límites altos; la suite `hardening.mjs` reinicia el servidor con límites bajos y simula clientes distintos con `X-Forwarded-For` (`TRUST_PROXY=loopback`). |
 
 ## 6. Aprendizajes sobre trabajar con IA
 

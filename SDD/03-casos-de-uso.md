@@ -60,6 +60,7 @@ flowchart LR
   - 2b. Nombre vacío, correo inválido o documento que no tenga entre 5 y 20 letras, números o guiones → `400`.
   - 3a. Correo ya registrado (sin importar mayúsculas) → `409`.
   - 3b. Documento de identidad ya registrado → `409`.
+  - 1a. Más de 30 registros desde la misma IP en una hora → `429` con `Retry-After` (RN-67).
   - Cualquier `role` enviado en el cuerpo se **ignora**: el registro público solo crea compradores.
 - **Postcondiciones:** existe un usuario `BUYER` activo (aún sin perfil de comprador, ver CU-07).
 - **Endpoint:** `POST /api/auth/register`
@@ -75,6 +76,7 @@ flowchart LR
 - **Flujos alternativos:**
   - 2a. Correo inexistente o contraseña incorrecta → `401` con el mismo mensaje en ambos casos ("Credenciales inválidas."), para no revelar qué correos existen.
   - 3a. Cuenta bloqueada → `403` con mensaje de bloqueo.
+  - 1a. Demasiados intentos fallidos (10 para esa cuenta desde la misma IP, o 100 desde esa IP, en 15 minutos) → `429` con `Retry-After`; los intentos correctos no cuentan (RN-66).
 - **Postcondiciones:** el usuario posee un token válido hasta que expire (por defecto 8 horas).
 - **Endpoint:** `POST /api/auth/login`
 
