@@ -91,6 +91,10 @@ MongoDB se publica en el puerto **27018** del equipo (no en el 27017 habitual) p
 | `CORS_ORIGIN` | No | Frontends que pueden llamar a la API desde el navegador, separados por coma. | `http://localhost:5173` (Vite) |
 | `DATABASE_URL` | **Sí** | Conexión a PostgreSQL. Si falta, el servidor no arranca. | ver `.env.example` |
 | `MONGO_URL` | **Sí** | Conexión a MongoDB. Si falta, el servidor no arranca. | ver `.env.example` |
+| `TRUST_PROXY` | No | Proxies de confianza delante de la API, para conocer la IP real del cliente. `1` en Render; vacío en local. | vacío (ninguno) |
+| `RATE_LIMIT_LOGIN_PER_ACCOUNT` | No | Intentos fallidos de login por IP y correo en 15 minutos. | `10` |
+| `RATE_LIMIT_LOGIN_PER_IP` | No | Intentos fallidos de login por IP en 15 minutos. | `100` |
+| `RATE_LIMIT_REGISTER_PER_IP` | No | Cuentas nuevas por IP en una hora. | `30` |
 
 Si `ADMIN_EMAIL`, `ADMIN_PASSWORD` o `ADMIN_DOCUMENT_NUMBER` no están definidos, no se crea ningún administrador y no habrá forma de crear vendedores ni otros roles.
 
@@ -121,7 +125,7 @@ La plataforma se publica con planes gratuitos: backend en **Render** (configurad
 npm test
 ```
 
-Corre más de 300 comprobaciones de punta a punta contra un servidor real y bases de datos reales: flujo completo de compra, dirección de entrega y estado comercial, concurrencia (sobreventa, deadlocks, doble despacho), posventa, reportes con cifras exactas, catálogo y listados por rol, CORS y persistencia tras reiniciar.
+Corre más de 300 comprobaciones de punta a punta contra un servidor real y bases de datos reales: flujo completo de compra, dirección de entrega y estado comercial, concurrencia (sobreventa, deadlocks, doble despacho), posventa, reportes con cifras exactas, catálogo y listados por rol, CORS, persistencia tras reiniciar y endurecimiento de la API (encabezados de seguridad, tamaño del cuerpo y límites de intentos).
 
 - Requiere Docker con las bases levantadas (`npm run db:up`).
 - Usa **bases de prueba separadas** (`nexusmarket_e2e`), que se vacían al empezar: tus datos de desarrollo no se tocan. El runner se niega a correr si el nombre de la base no contiene `e2e` o `test`.
@@ -400,7 +404,7 @@ Este proyecto es una base funcional, no un sistema listo para producción:
 - El **pago es simulado**: solo cambia el estado del pedido.
 - **Productos digitales**: pasan por inventario y envío como los físicos (la especificación pide entrega inmediata tras el pago; queda para una fase posterior).
 - La **validación de entradas** se hace a mano en los servicios, sin una librería de esquemas.
-- **Sin límite de intentos de login**.
+- Los **límites de intentos de login y registro** viven en memoria: se reinician en cada despliegue y no se comparten entre instancias.
 - El dinero se maneja como `number`; en producción conviene usar enteros en centavos.
 
 La lista completa está en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-limitaciones-conocidas).

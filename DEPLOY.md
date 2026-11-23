@@ -56,7 +56,7 @@ Todo en la región **Este de EE. UU. (Virginia)** para que las bases y la API es
    | `ADMIN_PASSWORD` | Contraseña **fuerte** del administrador (mínimo 8 caracteres; la API será pública) |
    | `ADMIN_DOCUMENT_NUMBER` | Documento del administrador (5 a 20 letras, números o guiones) |
 
-   `JWT_SECRET` lo genera Render solo; `NODE_ENV`, `NODE_VERSION` y la duración del token ya vienen en el blueprint.
+   `JWT_SECRET` lo genera Render solo; `NODE_ENV`, `NODE_VERSION`, `TRUST_PROXY` y la duración del token ya vienen en el blueprint.
 4. **Apply**. El primer despliegue tarda unos minutos: instala, aplica las migraciones en Neon, compila y arranca. Al arrancar crea el administrador.
 5. Comprueba que responde: abre `https://nexusmarket-api.onrender.com/health` (o la URL que muestre Render) → debe decir `{"status":"ok"}`.
 
@@ -106,5 +106,6 @@ Cada merge a `main` se publica solo: Render redespliega el backend (y aplica mig
 | `No se pudo conectar a PostgreSQL` | `DATABASE_URL` con la conexión *pooled* o sin `?sslmode=require`. |
 | `No se pudo conectar a MongoDB` | Falta `0.0.0.0/0` en Network Access de Atlas, contraseña con caracteres especiales sin codificar, o falta `/nexusmarket` en la URL. |
 | El navegador muestra error de CORS | `CORS_ORIGIN` no coincide exactamente con el dominio de Vercel (revisa `https://` y la barra final). |
+| `429 Demasiados intentos fallidos…` al iniciar sesión | Más de 10 claves erróneas para esa cuenta en 15 minutos (o 100 desde la misma red). Espera los minutos que indica o redespliega el servicio, que reinicia el conteo. |
 | El login tarda casi un minuto | La API estaba dormida (plan gratuito). Es normal la primera vez. |
 | El frontend llama a `localhost:3000` | Falta `VITE_API_URL` en Vercel o no se hizo **Redeploy** después de agregarla. |

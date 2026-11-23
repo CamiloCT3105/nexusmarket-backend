@@ -23,6 +23,8 @@ services:
         generateValue: true # Render genera un secreto aleatorio
       - key: JWT_EXPIRES_IN_SECONDS
         value: "28800"
+      - key: TRUST_PROXY # Render pone un proxy delante: así los límites de intentos ven la IP real del cliente
+        value: "1"
       - key: DATABASE_URL # Neon: cadena de conexión directa (sin -pooler), con ?sslmode=require
         sync: false
       - key: MONGO_URL # Atlas: mongodb+srv://…/nexusmarket?retryWrites=true&w=majority

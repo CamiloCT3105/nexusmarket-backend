@@ -2,6 +2,22 @@ import { NextFunction, Request, Response } from "express";
 import { AppError } from "../errors/AppError";
 import { isUniqueViolation } from "../db/prismaErrors";
 
+// Los errores de express.json() traen `type` y un `status` 4xx (paquete http-errors)
+const BODY_ERRORS: Record<string, string> = {
+  "entity.parse.failed": "El cuerpo de la petición no es un JSON válido.",
+  "entity.too.large": "El cuerpo de la petición es demasiado grande.",
+  "encoding.unsupported": "La codificación del cuerpo de la petición no es compatible.",
+  "charset.unsupported": "El juego de caracteres del cuerpo de la petición no es compatible.",
+  "request.aborted": "La petición se interrumpió antes de terminar.",
+};
+
+function bodyParserMessage(err: unknown): { status: number; message: string } | null {
+  if (typeof err !== "object" || err === null) return null;
+  const { type, status } = err as { type?: unknown; status?: unknown };
+  if (typeof type !== "string" || typeof status !== "number" || status < 400 || status >= 500) return null;
+  return { status, message: BODY_ERRORS[type] ?? "La petición no es válida." };
+}
+
 // Rutas que no existen
 export function notFoundHandler(_req: Request, res: Response): void {
   res.status(404).json({ message: "Ruta no encontrada." });
@@ -21,9 +37,10 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return;
   }
 
-  // Body con JSON mal formado (lo lanza express.json())
-  if (err instanceof SyntaxError && "body" in err) {
-    res.status(400).json({ message: "El cuerpo de la petición no es un JSON válido." });
+  // Errores al leer el cuerpo (los lanza express.json()): son culpa de la petición, no del servidor
+  const bodyError = bodyParserMessage(err);
+  if (bodyError) {
+    res.status(bodyError.status).json({ message: bodyError.message });
     return;
   }
 
