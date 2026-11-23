@@ -6,6 +6,9 @@ API REST de **NexusMarket**, un marketplace que conecta compradores y vendedores
 
 Proyecto académico desarrollado con **desarrollo asistido por IA (vibe coding)**. El documento de negocio, los casos de uso, las decisiones técnicas y la bitácora del proceso están en la carpeta [`SDD/`](./SDD).
 
+> **Demo en vivo:** [nexusmarket-frontend.vercel.app](https://nexusmarket-frontend.vercel.app) · API: [nexusmarket-api.onrender.com/health](https://nexusmarket-api.onrender.com/health)  
+> Plan gratuito: la primera petición tras un rato sin uso puede tardar cerca de un minuto mientras el servidor despierta.
+
 ## Tabla de contenido
 
 - [Stack tecnológico](#stack-tecnológico)
@@ -14,6 +17,7 @@ Proyecto académico desarrollado con **desarrollo asistido por IA (vibe coding)*
 - [Variables de entorno](#variables-de-entorno)
 - [Scripts](#scripts)
 - [Despliegue](#despliegue)
+- [Pruebas](#pruebas)
 - [Estructura del proyecto](#estructura-del-proyecto)
 - [Autenticación y uso rápido](#autenticación-y-uso-rápido)
 - [Flujo de negocio](#flujo-de-negocio)
@@ -127,7 +131,7 @@ La plataforma se publica con planes gratuitos: backend en **Render** (configurad
 npm test
 ```
 
-Corre más de 300 comprobaciones de punta a punta contra un servidor real y bases de datos reales: flujo completo de compra, dirección de entrega y estado comercial, concurrencia (sobreventa, deadlocks, doble despacho), posventa, reportes con cifras exactas, catálogo y listados por rol, CORS, persistencia tras reiniciar y endurecimiento de la API (encabezados de seguridad, tamaño del cuerpo y límites de intentos).
+Corre más de 400 comprobaciones de punta a punta contra un servidor real y bases de datos reales: flujo completo de compra, dirección de entrega y estado comercial, concurrencia (sobreventa, deadlocks, doble despacho), posventa, reportes con cifras exactas, catálogo y listados por rol, CORS, fotos de producto, persistencia tras reiniciar y endurecimiento de la API (encabezados de seguridad, tamaño del cuerpo y límites de intentos).
 
 - Requiere Docker con las bases levantadas (`npm run db:up`).
 - Usa **bases de prueba separadas** (`nexusmarket_e2e`), que se vacían al empezar: tus datos de desarrollo no se tocan. El runner se niega a correr si el nombre de la base no contiene `e2e` o `test`.
