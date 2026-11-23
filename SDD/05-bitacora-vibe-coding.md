@@ -143,6 +143,7 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 36 | Un cuerpo de más de 100 kB respondía `500` y quedaba registrado como error del servidor | El manejador central solo reconocía el JSON mal formado entre los errores de `express.json()`. | Los errores del lector del cuerpo responden con su código `4xx` y un mensaje en español (`413` para el tamaño). |
 | 37 | La verificación de «sin errores 500» del runner solo miraba el último arranque del servidor | Cada reinicio vaciaba el registro acumulado. | Se guarda la salida de todos los arranques y se revisa completa al final. |
 | 38 | Los límites de login romperían las suites que inician sesión cientos de veces desde `localhost` | Todas las peticiones de prueba salen de la misma IP. | Las suites normales corren con límites altos; la suite `hardening.mjs` reinicia el servidor con límites bajos y simula clientes distintos con `X-Forwarded-For` (`TRUST_PROXY=loopback`). |
+| 39 | En producción, un mismo cliente caía en 2 o 3 contadores de intentos distintos | Delante de la API hay más de un proxy (Cloudflare y el balanceador de Render); con `TRUST_PROXY=1` la API tomaba la IP del balanceador, y con `2` la de Cloudflare. Render no documenta el número de saltos. | Se midió en vivo con intentos fallidos y `X-Forwarded-For` falsos: con `3` hay un solo contador por cliente y la IP falsa se ignora. Valor fijado en `render.yaml`. |
 
 ## 6. Aprendizajes sobre trabajar con IA
 
@@ -156,6 +157,6 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 
 1. ~~Migración a base de datos~~ ✅ completada: PostgreSQL + MongoDB (ver `SDD/02`, sección 6.1).
 2. **Validación de entradas** con una librería (por ejemplo, `zod`).
-3. ~~Pruebas automatizadas~~ ✅ `npm test` (e2e).
+3. ~~Pruebas automatizadas~~ ✅ `npm test` (e2e), en integración continua con GitHub Actions en cada PR (D-63).
 4. **Productos digitales** con entrega inmediata tras el pago.
 5. ~~Frontend en React + TypeScript~~ ✅ en el repositorio `nexusmarket-frontend`, con sus propias pruebas e integración continua.

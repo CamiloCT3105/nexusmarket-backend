@@ -1,0 +1,97 @@
+name: CI
+
+# Cada PR y cada cambio en main pasan por las mismas revisiones que se corren en local:
+# compilación, migraciones al día con el esquema, pruebas de punta a punta y datos de demostración.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Build, migraciones, pruebas e2e y datos de demostración
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Bases de datos desechables: cada ejecución empieza vacía
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus_ci
+          POSTGRES_DB: nexusmarket
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U nexus -d nexusmarket"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      mongo:
+        image: mongo:8
+        env:
+          MONGO_INITDB_ROOT_USERNAME: nexus
+          MONGO_INITDB_ROOT_PASSWORD: nexus_ci
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://nexus:nexus_ci@localhost:5432/nexusmarket?schema=public
+      MONGO_URL: mongodb://nexus:nexus_ci@localhost:27017/nexusmarket?authSource=admin
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Mismo comando de compilación que Render (prisma generate + tsc con tipos estrictos)
+      - run: npm run build
+
+      # Las migraciones aplicadas desde cero deben producir exactamente el esquema de Prisma:
+      # si alguien cambia schema.prisma sin crear la migración, falla aquí y no en producción
+      - name: Migraciones al día con el esquema
+        run: |
+          npx prisma migrate deploy
+          npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      # Más de 390 comprobaciones contra un servidor real, en bases separadas (nexusmarket_e2e)
+      - run: npm test
+
+      # El script de la presentación debe seguir funcionando con cada cambio, y ser idempotente
+      - name: Datos de demostración (dos veces)
+        env:
+          PORT: "3000"
+          CORS_ORIGIN: http://localhost:5173
+          ADMIN_EMAIL: admin@ci.test
+          ADMIN_DOCUMENT_NUMBER: "1000000000"
+          SEED_API_URL: http://localhost:3000
+          SEED_ADMIN_EMAIL: admin@ci.test
+        run: |
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          secret="$(openssl rand -hex 32)"
+          echo "::add-mask::$secret"
+          ADMIN_PASSWORD="$password" JWT_SECRET="$secret" NODE_ENV=production nohup node dist/index.js > server.log 2>&1 &
+          export SEED_ADMIN_PASSWORD="$password" SEED_DEMO_PASSWORD="$(openssl rand -hex 12)"
+          npm run seed:demo
+          npm run seed:demo | tee seed-second.log
+          grep -q "no se modificó nada" seed-second.log
+
+      - name: Guardar registros si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-logs
+          path: |
+            server.log
+            seed-second.log
+          if-no-files-found: ignore
+          retention-days: 7
