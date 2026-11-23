@@ -141,44 +141,44 @@ Las reglas `RN-xx` son las que el sistema aplica hoy. Varias se desprenden de la
 
 ## 3. Matriz de permisos por rol
 
-Leyenda: ✅ puede · 🔒 puede solo sobre lo suyo · ❌ no puede.
+Leyenda: **Sí** puede · **Propio** solo sobre sus propios datos · **No** no puede.
 
 | Módulo / acción | Visitante | Comprador | Vendedor | Op. Logístico | Supervisor | Admin |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|
-| Registrarse e iniciar sesión | ✅ | — | — | — | — | — |
-| Crear usuarios con cualquier rol | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Cambiar estado o rol de usuarios | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Ver un usuario | ❌ | 🔒 | 🔒 | 🔒 | ✅ | ✅ |
-| Listar y buscar usuarios | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
-| Perfil de comprador (crear / direcciones) | ❌ | 🔒 | ❌ | ❌ | ❌ | ❌ |
-| Estado comercial del comprador | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Incorporar vendedores | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Crear productos | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
-| Modificar productos (variantes / estado) | ❌ | ❌ | 🔒 | ❌ | ❌ | ✅ |
-| Consultar catálogo | ❌ | ✅ (publicados) | ✅ (+ los suyos) | ✅ (publicados) | ✅ | ✅ |
-| Crear bodegas | ❌ | ❌ | 🔒 | ❌ | ❌ | ✅ |
-| Consultar bodegas | ❌ | ❌ | 🔒 | ✅ | ✅ | ✅ |
-| Ingresar stock / marcar dañado | ❌ | ❌ | 🔒 | ✅ | ❌ | ✅ |
-| Consultar inventario | ❌ | ❌ | 🔒 | ✅ | ✅ | ✅ |
-| Reservar / salida / reingreso de inventario | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Carrito | ❌ | 🔒 | ❌ | ❌ | ❌ | ❌ |
-| Hacer checkout y pagar | ❌ | 🔒 | ❌ | ❌ | ❌ | ❌ |
-| Consultar pedidos | ❌ | 🔒 | 🔒 (solo sus líneas) | ✅ | ✅ | ✅ |
-| Cambiar estado de pedido a mano | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Generar facturas | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Consultar facturas | ❌ | 🔒 | ❌ | ❌ | ✅ | ✅ |
-| Crear y actualizar envíos | ❌ | ❌ | ❌ | ✅ | ❌ | ✅ |
-| Consultar envíos | ❌ | 🔒 | ❌ | ✅ | ✅ | ✅ |
-| Solicitar devoluciones | ❌ | 🔒 | ❌ | ❌ | ❌ | ❌ |
-| Procesar devoluciones | ❌ | ❌ | 🔒 | ❌ | ❌ | ✅ |
-| Consultar devoluciones | ❌ | 🔒 | 🔒 (de sus productos) | ❌ | ✅ | ✅ |
-| Completar reembolsos | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Consultar reembolsos | ❌ | 🔒 | ❌ | ❌ | ✅ | ✅ |
-| Reportes administrativos | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Registrarse e iniciar sesión | Sí | — | — | — | — | — |
+| Crear usuarios con cualquier rol | No | No | No | No | No | Sí |
+| Cambiar estado o rol de usuarios | No | No | No | No | No | Sí |
+| Ver un usuario | No | Propio | Propio | Propio | Sí | Sí |
+| Listar y buscar usuarios | No | No | No | No | Sí | Sí |
+| Perfil de comprador (crear / direcciones) | No | Propio | No | No | No | No |
+| Estado comercial del comprador | No | No | No | No | No | Sí |
+| Incorporar vendedores | No | No | No | No | No | Sí |
+| Crear productos | No | No | Sí | No | No | No |
+| Modificar productos (variantes / estado) | No | No | Propio | No | No | Sí |
+| Consultar catálogo | No | Sí (publicados) | Sí (+ los suyos) | Sí (publicados) | Sí | Sí |
+| Crear bodegas | No | No | Propio | No | No | Sí |
+| Consultar bodegas | No | No | Propio | Sí | Sí | Sí |
+| Ingresar stock / marcar dañado | No | No | Propio | Sí | No | Sí |
+| Consultar inventario | No | No | Propio | Sí | Sí | Sí |
+| Reservar / salida / reingreso de inventario | No | No | No | No | No | Sí |
+| Carrito | No | Propio | No | No | No | No |
+| Hacer checkout y pagar | No | Propio | No | No | No | No |
+| Consultar pedidos | No | Propio | Propio (solo sus líneas) | Sí | Sí | Sí |
+| Cambiar estado de pedido a mano | No | No | No | No | No | Sí |
+| Generar facturas | No | No | No | No | No | Sí |
+| Consultar facturas | No | Propio | No | No | Sí | Sí |
+| Crear y actualizar envíos | No | No | No | Sí | No | Sí |
+| Consultar envíos | No | Propio | No | Sí | Sí | Sí |
+| Solicitar devoluciones | No | Propio | No | No | No | No |
+| Procesar devoluciones | No | No | Propio | No | No | Sí |
+| Consultar devoluciones | No | Propio | Propio (de sus productos) | No | Sí | Sí |
+| Completar reembolsos | No | No | No | No | No | Sí |
+| Consultar reembolsos | No | Propio | No | No | Sí | Sí |
+| Reportes administrativos | No | No | No | No | Sí | Sí |
 
 **Notas:**
 
-- 🔒 en **"Ver un usuario"** significa que cada rol puede consultar únicamente **su propio** usuario.
+- **Propio** en "Ver un usuario" significa que cada rol puede consultar únicamente **su propio** usuario.
 - El **carrito** es privado: ni el administrador puede verlo.
 - Cambios para cumplir la **matriz de responsabilidades** de la especificación (sección 12): el **operador logístico** administra inventario (ingresos y daños, en cualquier bodega) y el **vendedor** participa en la gestión de pedidos (ve los que incluyen sus productos, solo con sus líneas).
 - **Usuarios** (sección 11): el documento de identidad y el correo son únicos; ambos se normalizan antes de comparar.

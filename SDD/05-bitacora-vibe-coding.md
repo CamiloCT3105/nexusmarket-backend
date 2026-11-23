@@ -1,12 +1,12 @@
 # Bitácora de vibe coding
 
-Este documento registra **cómo se construyó** NexusMarket Backend trabajando junto con un asistente de IA: la metodología, el orden de construcción, los problemas reales que aparecieron y cómo se resolvieron.
+Este documento describe el proceso de construcción de NexusMarket mediante desarrollo asistido por un asistente de IA: la metodología empleada, el orden de construcción, los problemas encontrados y la forma en que se resolvieron.
 
-> **Nota de honestidad.** Es un resumen reconstruido a partir de la sesión de trabajo. La conversación completa no se versiona en el repositorio; aquí quedan las decisiones y aprendizajes que importan.
+> El contenido es un resumen elaborado a partir de las sesiones de trabajo. Las conversaciones completas no se versionan en el repositorio; se conservan las decisiones y los aprendizajes relevantes.
 
 ## 1. Metodología
 
-El desarrollo se hizo **paso a paso, con revisión humana en cada paso**: la IA propone el código con su explicación, el desarrollador lo escribe en su proyecto, lo prueba con peticiones HTTP y solo entonces se avanza. Nada se dio por bueno sin ejecutarlo.
+El desarrollo se realizó de forma incremental y con revisión humana en cada paso: el asistente propone el código con su justificación, el desarrollador lo revisa, lo integra y lo prueba, y solo entonces se avanza. Ningún cambio se dio por válido sin ejecutarlo.
 
 ### Ciclo por módulo
 
@@ -21,15 +21,15 @@ El desarrollo se hizo **paso a paso, con revisión humana en cada paso**: la IA 
 
 ### Reglas de trabajo que se mantuvieron
 
-- **Explicar antes de pasar al siguiente archivo**: cada pieza de código llegó con su porqué.
-- **Señalar lo que no está en el documento.** Cuando la IA agregó una regla que se desprende de la lógica del negocio pero no está escrita (por ejemplo, exigir rol `BUYER` para registrar un comprador), lo dijo explícitamente para que el desarrollador decidiera. Esas reglas están marcadas como *Diseño* en [`04`](./04-reglas-de-negocio-y-permisos.md).
-- **Anotar los pendientes en voz alta** en lugar de esconderlos (validación de bodega al asignarla a un vendedor, pago simulado, etc.). Hoy viven en las [limitaciones conocidas](./02-arquitectura-y-decisiones.md#8-limitaciones-conocidas).
+- **Justificar cada cambio** antes de pasar al siguiente archivo.
+- **Señalar lo que no está en el documento.** Cuando el asistente agregó una regla que se desprende de la lógica del negocio pero no está escrita (por ejemplo, exigir rol `BUYER` para registrar un comprador), lo dijo explícitamente para que el desarrollador decidiera. Esas reglas están marcadas como *Diseño* en [`04`](./04-reglas-de-negocio-y-permisos.md).
+- **Registrar los pendientes de forma explícita** en lugar de omitirlos (validación de bodega al asignarla a un vendedor, pago simulado, etc.). Se documentan en las [limitaciones conocidas](./02-arquitectura-y-decisiones.md#8-limitaciones-conocidas).
 - **Probar los casos de error, no solo el feliz.** Cada módulo tiene pruebas de rechazo (stock insuficiente, rol incorrecto, recurso ajeno, transición inválida).
 - **Mantener la lógica fuera de los controllers** y las dependencias entre servicios en un solo sentido.
 
 ## 2. Plantilla de spec / prompt por módulo
 
-Esta es la estructura que funcionó para pedirle un módulo a la IA. Sirve para retomar el proyecto o para agregar módulos nuevos:
+Estructura utilizada para solicitar cada módulo al asistente. Sirve como referencia para retomar el proyecto o incorporar módulos nuevos:
 
 ```text
 Contexto
@@ -81,6 +81,12 @@ Entregable
 | 16 | **Facturas, envíos, devoluciones y reembolsos en PostgreSQL**; **reportes con SQL** | Cierra la parte relacional: posventa depende de pedidos, y los reportes ya pueden agregar todo en la base de datos. |
 | 17 | **Catálogo, carritos y bitácora en MongoDB** | Termina la migración: ya no queda ningún repositorio en memoria. |
 | 18 | **Preparación para el frontend**: CORS, catálogo con filtros, listados paginados por rol, pruebas e2e en el repositorio y tres brechas con la especificación (documento de identidad, operador logístico en inventario, pedidos del vendedor) | Al comparar el PDF original con lo implementado aparecieron requisitos que faltaban; el frontend los necesita desde la primera pantalla. |
+| 19 | **Frontend** en el repositorio `nexusmarket-frontend` (React, TypeScript y pruebas propias) | Con la API estable y documentada, la interfaz se construye rol por rol sobre contratos ya probados. |
+| 20 | **Dirección de entrega en el pedido y estado comercial** | Brechas con la especificación detectadas al construir las pantallas del operador logístico y del administrador. |
+| 21 | **Despliegue** en Render, Neon, Atlas y Vercel, con datos de demostración | Publica la plataforma completa para su evaluación. |
+| 22 | **Endurecimiento de la API** (límites de intentos, encabezados de seguridad, tamaño del cuerpo) | Necesario una vez que la API quedó expuesta públicamente. |
+| 23 | **Integración continua del backend** | Valida cada cambio con la misma suite que se ejecuta en local antes de llegar a producción. |
+| 24 | **Fotos de producto** | Completa la experiencia del catálogo sin depender de almacenamiento de archivos en el servidor. |
 
 ## 4. Resumen por módulo
 
@@ -101,7 +107,7 @@ Entregable
 
 ## 5. Problemas encontrados y cómo se resolvieron
 
-Los errores forman parte del proceso. Estos fueron los reales, en el orden en que aparecieron:
+Problemas encontrados durante el desarrollo, en el orden en que aparecieron:
 
 | # | Síntoma | Causa | Solución |
 |---|---|---|---|
@@ -144,20 +150,28 @@ Los errores forman parte del proceso. Estos fueron los reales, en el orden en qu
 | 37 | La verificación de «sin errores 500» del runner solo miraba el último arranque del servidor | Cada reinicio vaciaba el registro acumulado. | Se guarda la salida de todos los arranques y se revisa completa al final. |
 | 38 | Los límites de login romperían las suites que inician sesión cientos de veces desde `localhost` | Todas las peticiones de prueba salen de la misma IP. | Las suites normales corren con límites altos; la suite `hardening.mjs` reinicia el servidor con límites bajos y simula clientes distintos con `X-Forwarded-For` (`TRUST_PROXY=loopback`). |
 | 39 | En producción, un mismo cliente caía en 2 o 3 contadores de intentos distintos | Delante de la API hay más de un proxy (Cloudflare y el balanceador de Render); con `TRUST_PROXY=1` la API tomaba la IP del balanceador, y con `2` la de Cloudflare. Render no documenta el número de saltos. | Se midió en vivo con intentos fallidos y `X-Forwarded-For` falsos: con `3` hay un solo contador por cliente y la IP falsa se ignora. Valor fijado en `render.yaml`. |
-| 40 | El catálogo no tenía fotos y la semilla necesitaba imágenes con licencia clara | El modelo de producto no tenía campo de imagen. Raspar un banco de imágenes no era una opción (está prohibido y se bloqueó). | Campo `imageUrl` validado (RN-68, D-64) y fotos de Wikimedia Commons obtenidas con su API pública, con autor y licencia en `scripts/CREDITOS-IMAGENES.md`. Las fotos verticales se revisaron en el navegador y se cambió una que quedaba mal recortada. |
+| 40 | El catálogo no tenía fotos y la semilla necesitaba imágenes con licencia clara | El modelo de producto no tenía campo de imagen. Extraer imágenes de un banco comercial sin su API no era una opción válida. | Campo `imageUrl` validado (RN-68, D-64) y fotos de Wikimedia Commons obtenidas con su API pública, con autor y licencia en `scripts/CREDITOS-IMAGENES.md`. Las fotos verticales se revisaron en el navegador y se cambió una que quedaba mal recortada. |
 
 ## 6. Aprendizajes sobre trabajar con IA
 
-- **La IA acelera, pero el criterio es tuyo.** Varias reglas de negocio se decidieron en conversación; el desarrollador las aprobó o pidió quitarlas.
-- **Los mensajes de error son oro.** Pegar el error exacto y el archivo involucrado resuelve casi todo a la primera.
-- **Las versiones nuevas rompen cosas.** Dos de los problemas (TypeScript 7 y Express 5) vinieron de que `npm` instaló versiones más recientes de lo esperado. Conviene fijar versiones.
-- **Probar cada módulo antes de seguir** evita arrastrar errores y facilita saber dónde está un fallo.
-- **Documentar las simplificaciones** (pago simulado, memoria volátil) evita presentar como terminado algo que no lo está.
+- **El asistente acelera el desarrollo, pero las decisiones son del desarrollador.** Varias reglas de negocio se discutieron durante el trabajo y el desarrollador las aprobó o las descartó.
+- **El contexto preciso agiliza la resolución de errores.** Compartir el mensaje exacto y el archivo involucrado permitió resolver la mayoría de los problemas en el primer intento.
+- **Las versiones deben fijarse.** Dos de los problemas (TypeScript 7 y Express 5) se originaron en versiones más recientes de lo previsto instaladas por `npm`.
+- **Probar cada módulo antes de continuar** evita acumular errores y facilita localizar una falla.
+- **Documentar las simplificaciones** (pago simulado, almacenamiento en memoria) evita presentar como terminado algo que no lo está.
+- **Algunos problemas solo aparecen en producción.** El número de proxies delante de la API (fila 39) se determinó midiendo en el entorno real.
 
 ## 7. Próximos pasos
 
-1. ~~Migración a base de datos~~ ✅ completada: PostgreSQL + MongoDB (ver `SDD/02`, sección 6.1).
-2. **Validación de entradas** con una librería (por ejemplo, `zod`).
-3. ~~Pruebas automatizadas~~ ✅ `npm test` (e2e), en integración continua con GitHub Actions en cada PR (D-63).
-4. **Productos digitales** con entrega inmediata tras el pago.
-5. ~~Frontend en React + TypeScript~~ ✅ en el repositorio `nexusmarket-frontend`, con sus propias pruebas e integración continua.
+Completados:
+
+- Migración a PostgreSQL y MongoDB (ver `SDD/02`, sección 6.1).
+- Pruebas automatizadas de punta a punta, en integración continua (D-63).
+- Frontend en React y TypeScript (repositorio `nexusmarket-frontend`).
+- Despliegue de la plataforma completa.
+
+Pendientes:
+
+- Validación de entradas con una librería de esquemas (por ejemplo, zod).
+- Entrega inmediata de productos digitales tras el pago.
+- Carga de fotos de producto a un almacenamiento de objetos.

@@ -1,87 +1,81 @@
-# NexusMarket — Backend
+# NexusMarket Backend
 
 [![CI](https://github.com/CamiloCT3105/nexusmarket-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/CamiloCT3105/nexusmarket-backend/actions/workflows/ci.yml)
 
-API REST de **NexusMarket**, un marketplace que conecta compradores y vendedores. Cubre el ciclo completo de una compra (catálogo, inventario, carrito, pedido, pago, facturación, logística, devoluciones y reembolsos), con control de acceso por roles y reportes administrativos.
+API REST de NexusMarket, un marketplace que intermedia entre compradores y vendedores. Gestiona el ciclo completo de una compra (catálogo, inventario, carrito, pedido, pago, facturación, logística, devoluciones y reembolsos) con control de acceso por roles y reportes administrativos.
 
-Proyecto académico desarrollado con **desarrollo asistido por IA (vibe coding)**. El documento de negocio, los casos de uso, las decisiones técnicas y la bitácora del proceso están en la carpeta [`SDD/`](./SDD).
+La interfaz web se encuentra en el repositorio [nexusmarket-frontend](https://github.com/CamiloCT3105/nexusmarket-frontend). La documentación de análisis y diseño (especificación, casos de uso, reglas de negocio, decisiones técnicas y bitácora del proceso) está en la carpeta [`SDD/`](./SDD).
 
-> **Demo en vivo:** [nexusmarket-frontend.vercel.app](https://nexusmarket-frontend.vercel.app) · API: [nexusmarket-api.onrender.com/health](https://nexusmarket-api.onrender.com/health)  
-> Plan gratuito: la primera petición tras un rato sin uso puede tardar cerca de un minuto mientras el servidor despierta.
+**Demo:** [nexusmarket-frontend.vercel.app](https://nexusmarket-frontend.vercel.app) · **Estado de la API:** [nexusmarket-api.onrender.com/health](https://nexusmarket-api.onrender.com/health)
 
-## Tabla de contenido
+> La API se ejecuta en un plan gratuito que se suspende tras 15 minutos de inactividad. La primera petición posterior puede tardar alrededor de un minuto.
 
-- [Stack tecnológico](#stack-tecnológico)
+## Contenido
+
+- [Tecnologías](#tecnologías)
 - [Requisitos](#requisitos)
-- [Instalación y ejecución](#instalación-y-ejecución)
+- [Instalación](#instalación)
 - [Variables de entorno](#variables-de-entorno)
 - [Scripts](#scripts)
-- [Despliegue](#despliegue)
 - [Pruebas](#pruebas)
-- [Estructura del proyecto](#estructura-del-proyecto)
-- [Autenticación y uso rápido](#autenticación-y-uso-rápido)
-- [Flujo de negocio](#flujo-de-negocio)
-- [Roles](#roles)
+- [Despliegue](#despliegue)
+- [Arquitectura](#arquitectura)
+- [Autenticación](#autenticación)
+- [Flujo de negocio y roles](#flujo-de-negocio-y-roles)
 - [Endpoints](#endpoints)
-- [Documentación](#documentación)
+- [Seguridad](#seguridad)
 - [Limitaciones conocidas](#limitaciones-conocidas)
-- [Próximos pasos](#próximos-pasos)
+- [Hoja de ruta](#hoja-de-ruta)
 - [Licencia](#licencia)
 
-## Stack tecnológico
+## Tecnologías
 
 | Tecnología | Uso |
 |---|---|
-| Node.js | Entorno de ejecución |
-| TypeScript 5.x | Lenguaje (modo estricto) |
-| Express 5 | Framework web |
-| jsonwebtoken | Tokens JWT de autenticación |
-| `crypto` (`scrypt`) | Hash de contraseñas (incluido en Node) |
-| dotenv | Variables de entorno |
-| ts-node-dev | Recarga automática en desarrollo |
-| PostgreSQL 17 | Datos transaccionales (usuarios, inventario, pedidos, facturación, posventa) |
-| Prisma 7 | ORM y migraciones de PostgreSQL |
-| MongoDB 8 | Catálogo de productos, carritos y bitácora de movimientos |
-| Mongoose 9 | ODM de MongoDB (esquemas e índices) |
-| Docker Compose | Levanta ambas bases de datos en desarrollo |
+| Node.js y TypeScript 5 (modo estricto) | Entorno de ejecución y lenguaje |
+| Express 5 | Servidor HTTP |
+| PostgreSQL 17 y Prisma 7 | Datos transaccionales y migraciones |
+| MongoDB 8 y Mongoose 9 | Catálogo de productos, carritos y bitácora de movimientos |
+| jsonwebtoken y `crypto.scrypt` | Autenticación con JWT y hash de contraseñas |
+| helmet y express-rate-limit | Encabezados de seguridad y límite de intentos |
+| Docker Compose | Bases de datos para desarrollo local |
+| GitHub Actions | Integración continua |
 
 ## Requisitos
 
-- Node.js 20 o superior
-- npm
-- Docker Desktop (para PostgreSQL y MongoDB)
+- Node.js 22.12 o superior.
+- npm.
+- Docker Desktop, para ejecutar PostgreSQL y MongoDB en local.
 
-## Instalación y ejecución
+## Instalación
 
 ```bash
 # 1. Clonar el repositorio
 git clone https://github.com/CamiloCT3105/nexusmarket-backend.git
 cd nexusmarket-backend
 
-# 2. Instalar dependencias (también genera el cliente de Prisma)
+# 2. Instalar dependencias (genera también el cliente de Prisma)
 npm install
 
-# 3. Crear el archivo de entorno a partir del ejemplo
-cp .env.example .env        # en Windows (cmd): copy .env.example .env
+# 3. Crear el archivo de entorno a partir de la plantilla
+cp .env.example .env        # Windows (cmd): copy .env.example .env
 
-# 4. Generar un secreto para firmar los tokens y pegarlo en .env como JWT_SECRET
+# 4. Generar un secreto para los tokens y asignarlo a JWT_SECRET en .env
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
-# 5. Levantar PostgreSQL y MongoDB (con Docker Desktop abierto)
+# 5. Iniciar PostgreSQL y MongoDB (requiere Docker Desktop en ejecución)
 npm run db:up
 
-# 6. Crear las tablas en PostgreSQL
+# 6. Aplicar las migraciones
 npm run db:migrate
 
-# 7. Levantar el servidor en modo desarrollo
+# 7. Iniciar el servidor en modo desarrollo
 npm run dev
 ```
 
-Verifica que funciona abriendo `http://localhost:3000/health`, que debe responder `{ "status": "ok" }`. Si PostgreSQL no está disponible, el servidor no arranca y lo indica en la consola.
+El servidor queda disponible en `http://localhost:3000`, y `GET /health` responde `{ "status": "ok" }`. Si alguna de las dos bases de datos no está disponible, el servidor no inicia e informa la causa en la consola.
 
-> **Persistencia:** lo transaccional (usuarios, perfiles, bodegas, inventario, pedidos, facturas, envíos, devoluciones y reembolsos) vive en **PostgreSQL**; el catálogo de productos, los carritos y la bitácora de movimientos, en **MongoDB**. Todo sobrevive a los reinicios. Si alguna de las dos bases no está disponible, el servidor no arranca.
-
-MongoDB se publica en el puerto **27018** del equipo (no en el 27017 habitual) para no chocar con un MongoDB instalado localmente.
+MongoDB se publica en el puerto 27018 del equipo, en lugar del 27017, para no entrar en conflicto con una instalación local.
 
 ## Variables de entorno
 
@@ -89,41 +83,37 @@ MongoDB se publica en el puerto **27018** del equipo (no en el 27017 habitual) p
 |---|:--:|---|---|
 | `PORT` | No | Puerto del servidor. | `3000` |
 | `NODE_ENV` | No | Entorno de ejecución. | `development` |
-| `JWT_SECRET` | **Sí** | Secreto para firmar los tokens. Si falta, el servidor no arranca. | — |
-| `JWT_EXPIRES_IN_SECONDS` | No | Duración del token en segundos. | `28800` (8 horas) |
-| `ADMIN_EMAIL` | Recomendada | Correo del administrador que se crea al arrancar. | — |
+| `JWT_SECRET` | Sí | Secreto con el que se firman los tokens. | — |
+| `JWT_EXPIRES_IN_SECONDS` | No | Vigencia del token, en segundos. | `28800` (8 horas) |
+| `DATABASE_URL` | Sí | Cadena de conexión a PostgreSQL. | Ver `.env.example` |
+| `MONGO_URL` | Sí | Cadena de conexión a MongoDB. | Ver `.env.example` |
+| `CORS_ORIGIN` | No | Orígenes autorizados a consumir la API desde el navegador, separados por coma. | `http://localhost:5173` |
+| `ADMIN_EMAIL` | Recomendada | Correo del administrador que se crea al iniciar. | — |
 | `ADMIN_PASSWORD` | Recomendada | Contraseña de ese administrador (mínimo 8 caracteres). | — |
-| `ADMIN_DOCUMENT_NUMBER` | Recomendada | Documento de identidad de ese administrador (único). Si el administrador ya existía con un documento temporal (`PENDIENTE-…`), se le asigna este al arrancar. | — |
-| `CORS_ORIGIN` | No | Frontends que pueden llamar a la API desde el navegador, separados por coma. | `http://localhost:5173` (Vite) |
-| `DATABASE_URL` | **Sí** | Conexión a PostgreSQL. Si falta, el servidor no arranca. | ver `.env.example` |
-| `MONGO_URL` | **Sí** | Conexión a MongoDB. Si falta, el servidor no arranca. | ver `.env.example` |
-| `TRUST_PROXY` | No | Proxies de confianza delante de la API, para conocer la IP real del cliente. `3` en Render (Cloudflare y su balanceador van delante); vacío en local. | vacío (ninguno) |
-| `RATE_LIMIT_LOGIN_PER_ACCOUNT` | No | Intentos fallidos de login por IP y correo en 15 minutos. | `10` |
-| `RATE_LIMIT_LOGIN_PER_IP` | No | Intentos fallidos de login por IP en 15 minutos. | `100` |
-| `RATE_LIMIT_REGISTER_PER_IP` | No | Cuentas nuevas por IP en una hora. | `30` |
+| `ADMIN_DOCUMENT_NUMBER` | Recomendada | Documento de identidad de ese administrador. | — |
+| `TRUST_PROXY` | No | Número de proxies delante de la API, para obtener la IP real del cliente. En Render es `3`; en local se deja vacío. | Vacío |
+| `RATE_LIMIT_LOGIN_PER_ACCOUNT` | No | Intentos fallidos de inicio de sesión por IP y correo cada 15 minutos. | `10` |
+| `RATE_LIMIT_LOGIN_PER_IP` | No | Intentos fallidos de inicio de sesión por IP cada 15 minutos. | `100` |
+| `RATE_LIMIT_REGISTER_PER_IP` | No | Registros por IP cada hora. | `30` |
 
-Si `ADMIN_EMAIL`, `ADMIN_PASSWORD` o `ADMIN_DOCUMENT_NUMBER` no están definidos, no se crea ningún administrador y no habrá forma de crear vendedores ni otros roles.
+Sin `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `ADMIN_DOCUMENT_NUMBER` no se crea el administrador inicial, y sin él no es posible crear vendedores ni otros roles.
 
-**El archivo `.env` nunca debe subirse a GitHub.** Con el `JWT_SECRET` cualquiera podría fabricar tokens válidos. El repositorio incluye `.env.example` como plantilla, sin valores reales.
+El archivo `.env` contiene secretos y está excluido del repositorio. La plantilla `.env.example` no contiene valores reales.
 
 ## Scripts
 
-| Comando | Qué hace |
+| Comando | Descripción |
 |---|---|
-| `npm run dev` | Levanta el servidor con recarga automática. |
-| `npm run build` | Genera el cliente de Prisma y compila TypeScript a `dist/`. |
-| `npm start` | Ejecuta la versión compilada (`dist/index.js`). |
-| `npm run db:up` | Levanta PostgreSQL y MongoDB con Docker y espera a que estén listos. |
-| `npm run db:down` | Detiene los contenedores (los datos se conservan). Para borrarlos: `docker compose down -v`. |
-| `npm run db:migrate` | Crea o aplica migraciones en desarrollo (`prisma migrate dev`). |
-| `npm run db:deploy` | Aplica migraciones pendientes sin crear nuevas (producción). |
-| `npm run db:studio` | Abre Prisma Studio para ver y editar los datos en el navegador. |
-| `npm test` | Ejecuta las pruebas de punta a punta (ver abajo). |
-| `npm run seed:demo` | Carga datos de demostración a través de la API (ver [Despliegue](#despliegue)). |
-
-## Despliegue
-
-La plataforma se publica con planes gratuitos: backend en **Render** (configurado con [`render.yaml`](./render.yaml)), PostgreSQL en **Neon**, MongoDB en **Atlas** y el frontend en **Vercel**. La guía paso a paso, con la carga de datos de demostración y los problemas comunes, está en [`DEPLOY.md`](./DEPLOY.md).
+| `npm run dev` | Inicia el servidor con recarga automática. |
+| `npm run build` | Genera el cliente de Prisma y compila a `dist/`. |
+| `npm start` | Ejecuta la versión compilada. |
+| `npm run db:up` | Inicia PostgreSQL y MongoDB con Docker y espera a que estén disponibles. |
+| `npm run db:down` | Detiene los contenedores y conserva los datos (`docker compose down -v` los elimina). |
+| `npm run db:migrate` | Crea o aplica migraciones en desarrollo. |
+| `npm run db:deploy` | Aplica las migraciones pendientes, sin crear nuevas. |
+| `npm run db:studio` | Abre Prisma Studio para consultar los datos. |
+| `npm test` | Ejecuta las pruebas de punta a punta. |
+| `npm run seed:demo` | Carga datos de demostración a través de la API. |
 
 ## Pruebas
 
@@ -131,86 +121,90 @@ La plataforma se publica con planes gratuitos: backend en **Render** (configurad
 npm test
 ```
 
-Corre más de 400 comprobaciones de punta a punta contra un servidor real y bases de datos reales: flujo completo de compra, dirección de entrega y estado comercial, concurrencia (sobreventa, deadlocks, doble despacho), posventa, reportes con cifras exactas, catálogo y listados por rol, CORS, fotos de producto, persistencia tras reiniciar y endurecimiento de la API (encabezados de seguridad, tamaño del cuerpo y límites de intentos).
+La suite ejecuta más de 400 comprobaciones de punta a punta contra un servidor y bases de datos reales. Cubre el flujo completo de compra, la dirección de entrega y el estado comercial, la concurrencia (sobreventa, interbloqueos y doble despacho), la posventa, los reportes con cifras exactas, la visibilidad por rol, CORS, las fotos de producto, la persistencia tras un reinicio y el endurecimiento de la API.
 
-- Requiere Docker con las bases levantadas (`npm run db:up`).
-- Usa **bases de prueba separadas** (`nexusmarket_e2e`), que se vacían al empezar: tus datos de desarrollo no se tocan. El runner se niega a correr si el nombre de la base no contiene `e2e` o `test`.
-- Cualquier error `500` inesperado en el servidor cuenta como fallo.
-- Las suites están en [`tests/e2e/`](./tests/e2e).
+- Requiere las bases de datos en ejecución (`npm run db:up`).
+- Utiliza bases separadas (`nexusmarket_e2e`) que se vacían al comenzar, de modo que los datos de desarrollo no se modifican. Por seguridad, la ejecución se cancela si el nombre de la base no contiene `e2e` o `test`.
+- Cualquier error `500` inesperado del servidor se considera un fallo.
+- Las suites se encuentran en [`tests/e2e/`](./tests/e2e).
 
-**Integración continua.** Cada PR y cada cambio en `main` corre en GitHub Actions ([`ci.yml`](./.github/workflows/ci.yml)) con PostgreSQL y MongoDB desechables:
+### Integración continua
 
-1. Compilación con el mismo comando que Render (`npm run build`).
-2. Migraciones aplicadas desde cero y comparadas con `schema.prisma`: si alguien cambia el esquema sin crear la migración, falla.
-3. `npm test` completo.
-4. `npm run seed:demo` dos veces: los datos de demostración se cargan y la segunda vez no modifican nada.
+Cada pull request y cada cambio en `main` se validan en GitHub Actions ([`ci.yml`](./.github/workflows/ci.yml)) con PostgreSQL y MongoDB efímeros:
 
-## Estructura del proyecto
+1. Compilación con el mismo comando que se usa en producción.
+2. Verificación de que las migraciones reproducen exactamente `schema.prisma`.
+3. Suite completa de pruebas.
+4. Carga de los datos de demostración dos veces, para comprobar que el script es idempotente.
+
+## Despliegue
+
+La plataforma se publica con servicios en plan gratuito: la API en Render (configurada en [`render.yaml`](./render.yaml)), PostgreSQL en Neon, MongoDB en Atlas y el frontend en Vercel. El procedimiento completo, incluida la carga de datos de demostración, se describe en [`DEPLOY.md`](./DEPLOY.md).
+
+## Arquitectura
+
+Cada petición recorre las capas **ruta → controlador → servicio → repositorio**. Las reglas de negocio se concentran en los servicios; los repositorios aíslan el acceso a datos, por lo que cada módulo puede usar PostgreSQL o MongoDB sin afectar la lógica.
+
+La persistencia es políglota:
+
+- **PostgreSQL:** usuarios, perfiles, bodegas, inventario, pedidos, facturas, envíos, devoluciones y reembolsos. Las operaciones que afectan varias tablas, como el checkout, se ejecutan en una transacción.
+- **MongoDB:** catálogo de productos (con variantes flexibles), carritos con expiración automática y bitácora de movimientos de inventario.
 
 ```
 nexusmarket-backend/
-├── SDD/                     # Documentación y bitácora del desarrollo asistido por IA
-├── prisma/
-│   ├── schema.prisma        # Esquema relacional (PostgreSQL)
-│   └── migrations/          # Migraciones SQL versionadas
+├── .github/workflows/    Integración continua
+├── SDD/                  Documentación de análisis y diseño
+├── prisma/               Esquema relacional y migraciones
+├── scripts/              Datos de demostración y créditos de imágenes
 ├── src/
-│   ├── config/              # Variables de entorno
-│   ├── controllers/         # Adaptan HTTP a los servicios; verifican propiedad del recurso
-│   ├── db/                  # Cliente de Prisma, transacciones y errores de base de datos
-│   ├── errors/              # Errores tipados (cada uno con su código HTTP)
-│   ├── middlewares/         # authenticate · authorize · ownerOrRoles · errorHandler
-│   ├── models/              # Interfaces y enums de cada entidad
-│   ├── generated/           # Cliente de Prisma generado (no se sube a git)
-│   ├── repositories/        # Acceso a datos asíncrono (PostgreSQL o MongoDB)
-│   ├── routes/              # Endpoints y permisos por rol
-│   ├── services/            # Lógica de negocio
-│   ├── utils/               # Hash de contraseñas, JWT y lectura de parámetros
-│   ├── app.ts               # Configuración de Express
-│   └── index.ts             # Punto de entrada
-├── .env.example
-├── docker-compose.yml       # PostgreSQL + MongoDB para desarrollo
-├── prisma.config.ts         # Configuración de la CLI de Prisma
-├── LICENSE
-├── package.json
-├── tsconfig.json
-└── README.md
+│   ├── config/           Variables de entorno
+│   ├── controllers/      Adaptación HTTP y verificación de propiedad
+│   ├── db/               Conexiones, transacciones y modelos de MongoDB
+│   ├── errors/           Errores de dominio con su código HTTP
+│   ├── middlewares/      Autenticación, autorización, límites y errores
+│   ├── models/           Entidades y enumeraciones
+│   ├── repositories/     Acceso a datos
+│   ├── routes/           Endpoints y permisos por rol
+│   ├── services/         Reglas de negocio
+│   └── utils/            Contraseñas, JWT y parámetros
+├── tests/e2e/            Pruebas de punta a punta
+├── DEPLOY.md             Guía de despliegue
+└── render.yaml           Configuración del servicio en Render
 ```
 
-Cada petición sigue el recorrido **ruta → controller → servicio → repositorio**. El detalle de la arquitectura y las decisiones está en [`SDD/02-arquitectura-y-decisiones.md`](./SDD/02-arquitectura-y-decisiones.md).
+El detalle de la arquitectura, las máquinas de estado y las decisiones técnicas se documenta en [`SDD/02-arquitectura-y-decisiones.md`](./SDD/02-arquitectura-y-decisiones.md).
 
-## Autenticación y uso rápido
+## Autenticación
 
-Todo lo que hay bajo `/api` exige un token, excepto el registro y el login. El token se envía en el header `Authorization: Bearer <token>`.
+Todas las rutas bajo `/api` requieren un token, excepto el registro y el inicio de sesión. El token se envía en el encabezado `Authorization: Bearer <token>`.
 
-**1. Iniciar sesión como administrador** (con los datos de tu `.env`):
+Inicio de sesión:
 
 ```bash
 curl -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@nexusmarket.com","password":"TU_ADMIN_PASSWORD"}'
+  -d '{"email":"<ADMIN_EMAIL>","password":"<ADMIN_PASSWORD>"}'
 ```
 
-La respuesta incluye un `token`.
-
-**2. Usar el token** para crear, por ejemplo, un vendedor:
+Uso del token, por ejemplo para crear un vendedor:
 
 ```bash
 curl -X POST http://localhost:3000/api/users \
-  -H "Authorization: Bearer TU_TOKEN" \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"fullName":"Laura Vendedora","email":"laura@example.com","documentNumber":"1020304050","password":"clave12345","role":"SELLER"}'
+  -d '{"fullName":"Laura Gómez","email":"laura@example.com","documentNumber":"1020304050","password":"clave12345","role":"SELLER"}'
 ```
 
-> En Windows PowerShell, `curl` es un alias de otro comando; usa `curl.exe`, o mejor una herramienta como Postman o Thunder Client.
+En Windows PowerShell debe usarse `curl.exe`, ya que `curl` es un alias de otro comando.
 
-**Cómo se crean las cuentas:**
+Creación de cuentas:
 
-- El **registro público** (`POST /api/auth/register`) siempre crea un **comprador**.
-- Los demás roles (vendedor, operador logístico, supervisor, administrador) los crea un **administrador** con `POST /api/users`.
-- Un usuario `SELLER` debe además ser **incorporado como vendedor** (`POST /api/sellers`) antes de poder crear productos.
-- Un usuario `BUYER` debe crear su **perfil de comprador** (`POST /api/buyers`) antes de usar carrito y pedidos.
+- El registro público (`POST /api/auth/register`) crea siempre un comprador.
+- Los demás roles los crea un administrador con `POST /api/users`.
+- Un vendedor debe ser habilitado (`POST /api/sellers`) antes de publicar productos.
+- Un comprador debe crear su perfil con dirección (`POST /api/buyers`) antes de usar el carrito.
 
-## Flujo de negocio
+## Flujo de negocio y roles
 
 ```mermaid
 flowchart LR
@@ -225,164 +219,160 @@ flowchart LR
   I --> J[Reembolso]
 ```
 
-Estados del pedido: `PENDING_PAYMENT → PAID → SHIPPED → DELIVERED`. Un pedido entregado es inmutable. Los diagramas de estado de envío, devolución y reembolso están en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#5-máquinas-de-estado).
+Un pedido pasa por los estados `PENDING_PAYMENT → PAID → SHIPPED → DELIVERED`. Los diagramas de estado de envíos, devoluciones y reembolsos se encuentran en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#5-máquinas-de-estado).
 
-## Roles
-
-| Rol | Qué puede hacer |
+| Rol | Responsabilidades |
 |---|---|
-| `BUYER` (Comprador) | Gestionar su perfil, carrito y pedidos; pagar; consultar facturas y envíos; solicitar devoluciones. |
-| `SELLER` (Vendedor) | Gestionar sus productos, bodegas e inventario; procesar devoluciones de sus productos. |
-| `LOGISTICS_OPERATOR` (Operador Logístico) | Crear envíos y actualizar su seguimiento. |
-| `ADMIN` (Administrador) | Administrar usuarios, vendedores, facturas y reembolsos; acceso a la supervisión. |
-| `SUPERVISOR` (Supervisor) | Consultar información y reportes administrativos (solo lectura). |
+| Comprador (`BUYER`) | Perfil, carrito y pedidos; pago; consulta de facturas y envíos; solicitud de devoluciones. |
+| Vendedor (`SELLER`) | Productos, bodegas e inventario; gestión de devoluciones de sus productos. |
+| Operador logístico (`LOGISTICS_OPERATOR`) | Creación y seguimiento de envíos; inventario de todas las bodegas. |
+| Administrador (`ADMIN`) | Usuarios, vendedores, facturación, reembolsos y moderación de productos. |
+| Supervisor (`SUPERVISOR`) | Consulta de la operación y reportes, sin permisos de modificación. |
 
-La matriz completa por acción está en [`SDD/04-reglas-de-negocio-y-permisos.md`](./SDD/04-reglas-de-negocio-y-permisos.md#3-matriz-de-permisos-por-rol).
+La matriz de permisos por acción se encuentra en [`SDD/04`](./SDD/04-reglas-de-negocio-y-permisos.md#3-matriz-de-permisos-por-rol).
 
 ## Endpoints
 
-Todas las rutas van bajo `/api`. Las columnas de acceso indican el rol necesario; "propio" significa que solo puede operar sobre sus propios datos.
+Todas las rutas se publican bajo `/api`. En la columna de acceso, "propio" indica que el usuario solo puede operar sobre sus propios datos.
 
-### Autenticación — `/api/auth`
+### Autenticación: `/api/auth`
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| POST | `/register` | Público (crea un comprador). Body: `fullName`, `email`, `documentNumber`, `password` |
+| POST | `/register` | Público. Crea un comprador (`fullName`, `email`, `documentNumber`, `password`). |
 | POST | `/login` | Público |
 | GET | `/me` | Autenticado |
 
-### Usuarios — `/api/users`
+### Usuarios: `/api/users`
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| POST | `/` | Admin |
-| GET | `/:id` | Propio, Admin, Supervisor |
-| GET | `/` | Admin, Supervisor — listado con `?role=&status=&search=` (nombre, correo o documento) |
-| PATCH | `/:id/status` | Admin |
-| PATCH | `/:id/role` | Admin |
+| POST | `/` | Administrador |
+| GET | `/` | Administrador, supervisor. Filtros: `role`, `status`, `search`. |
+| GET | `/:id` | Propio, administrador, supervisor |
+| PATCH | `/:id/status` | Administrador |
+| PATCH | `/:id/role` | Administrador |
 
-### Compradores — `/api/buyers`
+### Compradores: `/api/buyers`
 
 | Método | Ruta | Acceso |
 |---|---|---|
 | POST | `/` | Comprador |
-| GET | `/:userId` | Propio, Admin, Supervisor |
+| GET | `/:userId` | Propio, administrador, supervisor |
 | PATCH | `/:userId/addresses` | Propio |
-| PATCH | `/:userId/commercial-status` | Admin |
+| PATCH | `/:userId/commercial-status` | Administrador |
 
-### Vendedores — `/api/sellers`
+### Vendedores: `/api/sellers`
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| POST | `/` | Admin |
-| GET | `/:userId` | Propio, Admin, Supervisor |
-| PATCH | `/:userId/warehouses` | Admin |
+| POST | `/` | Administrador |
+| GET | `/:userId` | Propio, administrador, supervisor |
+| PATCH | `/:userId/warehouses` | Administrador |
 
-### Productos — `/api/products`
+### Productos: `/api/products`
 
 | Método | Ruta | Acceso |
 |---|---|---|
 | POST | `/` | Vendedor |
+| GET | `/` | Autenticado. Catálogo con filtros `search`, `type`, `sellerId`, `minPrice`, `maxPrice`, `status` y orden `sort` (`newest`, `price_asc`, `price_desc`, `name_asc`). Compradores y operadores ven solo productos publicados; el vendedor ve además los suyos. |
 | GET | `/:id` | Autenticado |
-| GET | `/` | Autenticado — **catálogo**: `?search=&type=&sellerId=&minPrice=&maxPrice=&status=&sort=` (`newest`, `price_asc`, `price_desc`, `name_asc`). El comprador y el operador logístico ven solo publicados; el vendedor, además, los suyos en cualquier estado; supervisor y admin, todos |
 | GET | `/seller/:sellerId` | Autenticado |
-| PATCH | `/:id/variants` | Vendedor (propio), Admin |
-| PATCH | `/:id/status` | Vendedor (propio), Admin |
-| PATCH | `/:id/image` | Vendedor (propio), Admin — `{ "imageUrl": "https://…" }`, o `null` para quitarla |
+| PATCH | `/:id/variants` | Vendedor (propio), administrador |
+| PATCH | `/:id/status` | Vendedor (propio), administrador |
+| PATCH | `/:id/image` | Vendedor (propio), administrador. `{ "imageUrl": "https://..." }`, o `null` para quitarla. |
 
-### Bodegas — `/api/warehouses`
-
-| Método | Ruta | Acceso |
-|---|---|---|
-| POST | `/` | Vendedor (propia), Admin |
-| GET | `/` | Operador Logístico, Supervisor, Admin — `?type=&sellerId=` |
-| GET | `/:id` | Vendedor (propia), Operador Logístico, Supervisor, Admin |
-| GET | `/seller/:sellerId` | Propio, Operador Logístico, Supervisor, Admin |
-| PATCH | `/:id/link-seller` | Admin |
-
-### Inventario — `/api/inventory`
+### Bodegas: `/api/warehouses`
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| GET | `/` | Vendedor (solo sus bodegas), Operador Logístico, Supervisor, Admin — `?productId=&warehouseId=` |
-| POST | `/inbound` | Vendedor (bodega propia), Operador Logístico, Admin |
-| POST | `/damaged` | Vendedor (bodega propia), Operador Logístico, Admin |
-| POST | `/reserve` | Admin (operación interna) |
-| POST | `/outbound` | Admin (operación interna) |
-| POST | `/return` | Admin (operación interna) |
-| GET | `/:productId/:warehouseId` | Vendedor (bodega propia), Operador Logístico, Supervisor, Admin |
+| POST | `/` | Vendedor (propia), administrador |
+| GET | `/` | Operador logístico, supervisor, administrador. Filtros: `type`, `sellerId`. |
+| GET | `/:id` | Vendedor (propia), operador logístico, supervisor, administrador |
+| GET | `/seller/:sellerId` | Propio, operador logístico, supervisor, administrador |
+| PATCH | `/:id/link-seller` | Administrador |
 
-### Carrito — `/api/carts`
+### Inventario: `/api/inventory`
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| GET | `/:buyerId` | Solo el dueño |
-| POST | `/:buyerId/items` | Solo el dueño |
-| PATCH | `/:buyerId/items/:productId` | Solo el dueño |
-| DELETE | `/:buyerId/items/:productId` | Solo el dueño |
+| GET | `/` | Vendedor (sus bodegas), operador logístico, supervisor, administrador. Filtros: `productId`, `warehouseId`. |
+| GET | `/:productId/:warehouseId` | Vendedor (bodega propia), operador logístico, supervisor, administrador |
+| POST | `/inbound` | Vendedor (bodega propia), operador logístico, administrador |
+| POST | `/damaged` | Vendedor (bodega propia), operador logístico, administrador |
+| POST | `/reserve`, `/outbound`, `/return` | Administrador (operaciones internas) |
 
-### Pedidos — `/api/orders`
+### Carrito: `/api/carts`
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| POST | `/checkout` | Comprador con estado comercial `ACTIVE` — `{ addressIndex? }` elige la dirección de entrega (0 = principal); el pedido guarda una copia (`shippingAddress`) |
-| GET | `/` | Todos — `?status=&buyerId=&from=&to=`. Comprador: los suyos; **vendedor: los que incluyen sus productos, solo con sus líneas y `sellerSubtotal`**; operador, supervisor y admin: todos |
-| GET | `/buyer/:buyerId` | Propio, Admin, Supervisor |
-| GET | `/:id` | Comprador (propio), Vendedor (solo sus líneas, sin dirección de entrega), Operador Logístico, Supervisor, Admin |
+| GET | `/:buyerId` | Propio |
+| POST | `/:buyerId/items` | Propio |
+| PATCH | `/:buyerId/items/:productId` | Propio |
+| DELETE | `/:buyerId/items/:productId` | Propio |
+
+### Pedidos: `/api/orders`
+
+| Método | Ruta | Acceso |
+|---|---|---|
+| POST | `/checkout` | Comprador con estado comercial activo. `addressIndex` opcional selecciona la dirección de entrega (0 = principal). |
+| GET | `/` | Autenticado. Filtros: `status`, `buyerId`, `from`, `to`. El comprador ve los suyos; el vendedor, solo sus líneas y su subtotal. |
+| GET | `/buyer/:buyerId` | Propio, administrador, supervisor |
+| GET | `/:id` | Comprador (propio), vendedor (sus líneas), operador logístico, supervisor, administrador |
 | POST | `/:id/pay` | Comprador (propio) |
-| PATCH | `/:id/status` | Admin |
+| PATCH | `/:id/status` | Administrador |
 
-### Facturas — `/api/invoices`
-
-| Método | Ruta | Acceso |
-|---|---|---|
-| POST | `/` | Admin |
-| GET | `/:id` | Comprador (propia), Supervisor, Admin |
-| GET | `/` | Comprador (las suyas), Supervisor, Admin |
-| GET | `/order/:orderId` | Comprador (propia), Supervisor, Admin |
-
-### Envíos — `/api/shipments`
+### Facturas: `/api/invoices`
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| POST | `/` | Operador Logístico, Admin |
-| GET | `/` | Operador Logístico, Supervisor, Admin — `?status=` |
-| GET | `/:id` | Comprador (propio), Operador Logístico, Supervisor, Admin |
-| GET | `/order/:orderId` | Comprador (propio), Operador Logístico, Supervisor, Admin |
-| PATCH | `/:id/status` | Operador Logístico, Admin |
+| POST | `/` | Administrador |
+| GET | `/` | Comprador (las suyas), supervisor, administrador |
+| GET | `/:id` | Comprador (propia), supervisor, administrador |
+| GET | `/order/:orderId` | Comprador (propia), supervisor, administrador |
 
-### Devoluciones — `/api/returns`
+### Envíos: `/api/shipments`
+
+| Método | Ruta | Acceso |
+|---|---|---|
+| POST | `/` | Operador logístico, administrador |
+| GET | `/` | Operador logístico, supervisor, administrador. Filtro: `status`. |
+| GET | `/:id` | Comprador (propio), operador logístico, supervisor, administrador |
+| GET | `/order/:orderId` | Comprador (propio), operador logístico, supervisor, administrador |
+| PATCH | `/:id/status` | Operador logístico, administrador |
+
+### Devoluciones: `/api/returns`
 
 | Método | Ruta | Acceso |
 |---|---|---|
 | POST | `/` | Comprador |
-| GET | `/:id` | Comprador (propia), Vendedor (de sus productos), Supervisor, Admin |
-| GET | `/` | Comprador (de sus pedidos), Vendedor (de sus productos), Supervisor, Admin — `?status=` |
-| GET | `/order/:orderId` | Comprador (propio), Supervisor, Admin |
-| PATCH | `/:id/process` | Vendedor (de sus productos), Admin |
+| GET | `/` | Comprador (sus pedidos), vendedor (sus productos), supervisor, administrador. Filtro: `status`. |
+| GET | `/:id` | Comprador (propia), vendedor (sus productos), supervisor, administrador |
+| GET | `/order/:orderId` | Comprador (propio), supervisor, administrador |
+| PATCH | `/:id/process` | Vendedor (sus productos), administrador |
 
-### Reembolsos — `/api/refunds`
+### Reembolsos: `/api/refunds`
 
 | Método | Ruta | Acceso |
 |---|---|---|
-| GET | `/` | Comprador (los suyos), Supervisor, Admin — `?status=` |
-| GET | `/:id` | Comprador (propio), Supervisor, Admin |
-| GET | `/return/:returnId` | Comprador (propio), Supervisor, Admin |
-| PATCH | `/:id/status` | Admin |
+| GET | `/` | Comprador (los suyos), supervisor, administrador. Filtro: `status`. |
+| GET | `/:id` | Comprador (propio), supervisor, administrador |
+| GET | `/return/:returnId` | Comprador (propio), supervisor, administrador |
+| PATCH | `/:id/status` | Administrador |
 
-### Reportes — `/api/reports`
+### Reportes: `/api/reports`
 
-Solo lectura. Acceso: Supervisor y Admin.
+Solo lectura, para supervisor y administrador.
 
 | Método | Ruta | Contenido |
 |---|---|---|
 | GET | `/summary` | Resumen general de la plataforma |
-| GET | `/sales` | Ventas e ingresos. Parámetros opcionales `from` y `to` (`AAAA-MM-DD`) |
-| GET | `/inventory` | Existencias con alerta de stock bajo. Parámetro opcional `threshold` |
+| GET | `/sales` | Ventas e ingresos; parámetros opcionales `from` y `to` (`AAAA-MM-DD`) |
+| GET | `/inventory` | Existencias con alerta de stock bajo; parámetro opcional `threshold` |
 | GET | `/logistics` | Envíos por estado y pedidos pendientes de envío |
 | GET | `/returns` | Devoluciones y reembolsos |
 
-> Los listados (`GET /` de cada módulo) aceptan `?page=` y `?pageSize=` (máximo 100) y responden `{ items, page, pageSize, total, totalPages }`. Cada rol solo ve lo que le corresponde.
+Los listados aceptan `page` y `pageSize` (máximo 100) y responden con el formato `{ items, page, pageSize, total, totalPages }`.
 
 ### Códigos de respuesta
 
@@ -390,61 +380,47 @@ Solo lectura. Acceso: Supervisor y Admin.
 |---|---|
 | `200` / `201` | Operación exitosa / recurso creado |
 | `400` | Datos inválidos o regla de negocio incumplida |
-| `401` | Sin token, token inválido o vencido, o credenciales incorrectas |
-| `403` | Autenticado, pero sin permiso (rol o propiedad) |
-| `404` | Recurso o ruta no encontrados |
-| `409` | Conflicto: el recurso ya existe (correo registrado, perfil, factura o envío duplicados) |
-| `500` | Error inesperado del servidor (el detalle solo se registra en la consola) |
+| `401` | Token ausente, inválido o vencido, o credenciales incorrectas |
+| `403` | Usuario autenticado sin permiso sobre el recurso |
+| `404` | Recurso o ruta inexistente |
+| `409` | Recurso duplicado |
+| `413` | Cuerpo de la petición mayor a 100 kB |
+| `429` | Límite de intentos superado |
+| `500` | Error interno (el detalle solo se registra en el servidor) |
 
-Los errores devuelven un cuerpo `{ "message": "..." }`. Todos pasan por un único middleware central (`src/middlewares/errorHandler.ts`).
+Los errores responden con el formato `{ "message": "..." }`.
 
-## Documentación
+## Seguridad
 
-Todo el detalle funcional y técnico está en [`SDD/`](./SDD):
-
-| Documento | Contenido |
-|---|---|
-| [`01-especificacion-funcional.md`](./SDD/01-especificacion-funcional.md) | Documento de negocio original |
-| [`02-arquitectura-y-decisiones.md`](./SDD/02-arquitectura-y-decisiones.md) | Arquitectura, máquinas de estado y decisiones técnicas |
-| [`03-casos-de-uso.md`](./SDD/03-casos-de-uso.md) | Los 39 casos de uso implementados |
-| [`04-reglas-de-negocio-y-permisos.md`](./SDD/04-reglas-de-negocio-y-permisos.md) | Reglas numeradas y matriz de permisos |
-| [`05-bitacora-vibe-coding.md`](./SDD/05-bitacora-vibe-coding.md) | Metodología, orden de construcción y problemas resueltos |
+- Contraseñas almacenadas con `scrypt` y sal; nunca en texto plano.
+- El rol se consulta en cada petición, de modo que un bloqueo o un cambio de rol surte efecto de inmediato.
+- La identidad del usuario se toma siempre del token, nunca del cuerpo de la petición.
+- Límite de intentos fallidos de inicio de sesión por cuenta y por IP, y de registros por IP.
+- Encabezados de seguridad HTTP con helmet y tamaño máximo del cuerpo de 100 kB.
+- CORS restringido a los orígenes configurados.
 
 ## Limitaciones conocidas
 
-Este proyecto es una base funcional, no un sistema listo para producción:
+- No existen transacciones entre PostgreSQL y MongoDB: la bitácora de movimientos se escribe después de confirmar la operación en PostgreSQL.
+- El pago es simulado y solo cambia el estado del pedido.
+- Los productos digitales siguen el mismo flujo de inventario y envío que los físicos.
+- La validación de entradas se implementa en los servicios, sin una librería de esquemas.
+- Los contadores de intentos se mantienen en memoria y se reinician con cada despliegue.
+- Los importes se manejan como `number`; un sistema en producción debería usar enteros en centavos.
 
-- **Sin transacciones entre PostgreSQL y MongoDB**: la bitácora de movimientos se escribe justo después de confirmar en PostgreSQL; si MongoDB fallara en ese instante, el movimiento se perdería.
-- El **pago es simulado**: solo cambia el estado del pedido.
-- **Productos digitales**: pasan por inventario y envío como los físicos (la especificación pide entrega inmediata tras el pago; queda para una fase posterior).
-- La **validación de entradas** se hace a mano en los servicios, sin una librería de esquemas.
-- Los **límites de intentos de login y registro** viven en memoria: se reinician en cada despliegue y no se comparten entre instancias.
-- El dinero se maneja como `number`; en producción conviene usar enteros en centavos.
+La lista completa se encuentra en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-limitaciones-conocidas).
 
-La lista completa está en [`SDD/02`](./SDD/02-arquitectura-y-decisiones.md#8-limitaciones-conocidas).
+## Hoja de ruta
 
-## Próximos pasos
-
-- [x] Infraestructura de bases de datos (Docker, PostgreSQL + Prisma, esquema y migración inicial)
-- [x] Usuarios y credenciales en PostgreSQL
-- [x] Compradores (con direcciones), vendedores y bodegas en PostgreSQL
-- [x] Inventario y pedidos en PostgreSQL, con checkout transaccional y a prueba de sobreventa
-- [x] Facturas, envíos, devoluciones y reembolsos en PostgreSQL (transaccionales); reportes con consultas SQL agregadas
-- [x] Catálogo, carritos y movimientos de inventario en MongoDB
-- [ ] Validación de entradas con una librería (por ejemplo, `zod`)
-- [x] Pruebas automatizadas de punta a punta (`npm test`)
-- [x] Preparación para el frontend: CORS, catálogo con filtros y listados paginados por rol
-- [x] Documento de identidad único, operador logístico en inventario y pedidos visibles para el vendedor (brechas con la especificación)
-- [x] Dirección de entrega en el pedido y estado comercial que bloquea compras (brechas con la especificación)
-- [x] Frontend en React + TypeScript ([`nexusmarket-frontend`](https://github.com/CamiloCT3105/nexusmarket-frontend))
-- [x] Foto de producto por URL `https` (con fotos de demostración de Wikimedia Commons, ver [créditos](./scripts/CREDITOS-IMAGENES.md))
-- [ ] Subida de fotos a un almacenamiento de objetos (S3 o Cloudinary)
-- [ ] Productos digitales con entrega inmediata tras el pago
+- Validación de entradas con una librería de esquemas (por ejemplo, zod).
+- Carga de fotos de producto a un almacenamiento de objetos (S3 o Cloudinary).
+- Entrega inmediata de productos digitales tras el pago.
+- Integración con una pasarela de pagos.
 
 ## Licencia
 
-Distribuido bajo licencia MIT. Consulta el archivo [`LICENSE`](./LICENSE).
+Distribuido bajo la licencia MIT. Ver [`LICENSE`](./LICENSE).
 
----
+## Autor
 
-Desarrollado por [@CamiloCT3105](https://github.com/CamiloCT3105).
+[@CamiloCT3105](https://github.com/CamiloCT3105)

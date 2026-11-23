@@ -173,13 +173,13 @@ stateDiagram-v2
 
 | Base de datos | Entidades | Por qué | Estado |
 |---|---|---|---|
-| **PostgreSQL** (Prisma) | `User`, `Credential` | Integridad y unicidad del correo. | ✅ Migrado |
-| **PostgreSQL** (Prisma) | `Buyer` (+ `buyer_addresses`), `Seller`, `Warehouse` | Relaciones fuertes con `users`; las bodegas de un vendedor se calculan con la llave foránea `warehouses.seller_id`. | ✅ Migrado |
-| **PostgreSQL** (Prisma) | `InventoryItem`, `Order` (+ `order_items`) | El checkout necesita **transacciones** y actualizaciones atómicas del inventario. | ✅ Migrado |
-| **PostgreSQL** (Prisma) | `Invoice`, `Shipment` (+ `shipment_events`), `ReturnRequest`, `Refund` | Dinero, máquinas de estado y relaciones fuertes con `orders`; la aprobación de devoluciones y el seguimiento de envíos son transaccionales. Los reportes se calculan con `GROUP BY`. | ✅ Migrado |
-| **MongoDB** (Mongoose) | `Product` | Catálogo flexible: variantes embebidas y atributos distintos según el tipo de producto. Precio en `Decimal128`. | ✅ Migrado |
-| **MongoDB** (Mongoose) | `Cart` | Un documento por comprador, de escritura frecuente y vida corta. Operaciones atómicas (`$inc`, `$push`, `$set`, `$pull`) y expiración automática a los 30 días sin cambios (índice TTL). | ✅ Migrado |
-| **MongoDB** (Mongoose) | `InventoryMovement` | Bitácora que solo crece; se escribe con `afterCommit`, así un rollback en PostgreSQL no deja movimientos fantasma. | ✅ Migrado |
+| **PostgreSQL** (Prisma) | `User`, `Credential` | Integridad y unicidad del correo. | Migrado |
+| **PostgreSQL** (Prisma) | `Buyer` (+ `buyer_addresses`), `Seller`, `Warehouse` | Relaciones fuertes con `users`; las bodegas de un vendedor se calculan con la llave foránea `warehouses.seller_id`. | Migrado |
+| **PostgreSQL** (Prisma) | `InventoryItem`, `Order` (+ `order_items`) | El checkout necesita **transacciones** y actualizaciones atómicas del inventario. | Migrado |
+| **PostgreSQL** (Prisma) | `Invoice`, `Shipment` (+ `shipment_events`), `ReturnRequest`, `Refund` | Dinero, máquinas de estado y relaciones fuertes con `orders`; la aprobación de devoluciones y el seguimiento de envíos son transaccionales. Los reportes se calculan con `GROUP BY`. | Migrado |
+| **MongoDB** (Mongoose) | `Product` | Catálogo flexible: variantes embebidas y atributos distintos según el tipo de producto. Precio en `Decimal128`. | Migrado |
+| **MongoDB** (Mongoose) | `Cart` | Un documento por comprador, de escritura frecuente y vida corta. Operaciones atómicas (`$inc`, `$push`, `$set`, `$pull`) y expiración automática a los 30 días sin cambios (índice TTL). | Migrado |
+| **MongoDB** (Mongoose) | `InventoryMovement` | Bitácora que solo crece; se escribe con `afterCommit`, así un rollback en PostgreSQL no deja movimientos fantasma. | Migrado |
 
 Las tablas SQL que referencian productos (`inventory_items`, `order_items`, `return_requests`) guardan `product_id` como texto **sin llave foránea**, porque el producto vive en otra base de datos. Por eso la integridad de esa referencia la valida el servicio (`ProductService.getProductById`).
 
@@ -277,7 +277,7 @@ Probado con peticiones simultáneas reales: 5 checkouts de 3 unidades sobre un s
 
 ## 8. Limitaciones conocidas
 
-Se documentan de forma honesta para que no se confundan con funcionalidades:
+Se documentan para que no se confundan con funcionalidades completas:
 
 - **No hay transacciones entre PostgreSQL y MongoDB.** La bitácora de movimientos se escribe *después* de confirmar en PostgreSQL (`afterCommit`): si MongoDB fallara justo en ese instante, el movimiento se perdería aunque el inventario sí cambió (consistencia eventual). Para una garantía total haría falta un patrón *outbox*.
 - **La referencia `product_id` entre bases no tiene llave foránea**: la valida el servicio al crear inventario, carritos y pedidos, pero nada impide borrar un producto de MongoDB a mano y dejar referencias huérfanas (la API no permite borrar productos).
